@@ -198,12 +198,73 @@ const TOWER_DEFS = {
   cannon: { name:'Cannon', color:'#ffaa44', cost:200, ammo:10, damage:8, range:2.5, rate:110, bSpeed:3, bRadius:7  },
 };
 
-// Waypoints as [col, row] — rectilinear winding path left → right
-const RAW_WP = [
-  [0,6],[4,6],[4,2],[8,2],[8,10],[12,10],[12,4],[16,4],[16,8],[19,8]
+// ─── Multi-route configuration ─────────────────────────────────────────────────
+// Each route has multiple lanes (sub-paths). Routes change every 2 waves.
+// Each lane = array of [col, row] waypoints.
+const ROUTE_CONFIGS = [
+  // Route 0 (Waves 1-2): Two parallel S-curves (no crossing)
+  [
+    [[0,4],[5,4],[5,2],[12,2],[12,6],[17,6],[17,4],[19,4]],
+    [[0,9],[5,9],[5,11],[12,11],[12,7],[17,7],[17,9],[19,9]],
+  ],
+  // Route 1 (Waves 3-4): Two crossing paths, different start & end points
+  [
+    [[0,3],[8,3],[8,10],[19,10]],
+    [[0,10],[11,10],[11,3],[19,3]],
+  ],
+  // Route 2 (Waves 5-6): Three lanes with multiple intersections
+  [
+    [[0,2],[5,2],[5,11],[14,11],[14,5],[19,5]],
+    [[0,7],[10,7],[10,1],[19,1]],
+    [[0,11],[7,11],[7,4],[19,4]],
+  ],
 ];
-// Pixel centres of each waypoint
-const PX_WP = RAW_WP.map(([c,r]) => [c*TILE + TILE/2, r*TILE + TILE/2]);
+
+// Active route state — updated by setRoute()
+let currentLanes = [];   // [{ raw: [[c,r],...], px: [[x,y],...] }]
+let PATH_SET     = new Set();
+let spawnLaneIdx = 0;
+const SIDE_OFFSETS = [-8, 0, 8];  // lateral pixel offsets for parallel travel
+
+function buildLanes(rawConfig) {
+  return rawConfig.map(raw => ({
+    raw,
+    px: raw.map(([c,r]) => [c*TILE + TILE/2, r*TILE + TILE/2]),
+  }));
+}
+
+function buildPathSet(lanes) {
+  const s = new Set();
+  for (const lane of lanes) {
+    for (let i = 0; i < lane.raw.length - 1; i++) {
+      const [c1,r1] = lane.raw[i], [c2,r2] = lane.raw[i+1];
+      if (c1 === c2) {
+        const lo = Math.min(r1,r2), hi = Math.max(r1,r2);
+        for (let r = lo; r <= hi; r++) s.add(`${c1},${r}`);
+      } else {
+        const lo = Math.min(c1,c2), hi = Math.max(c1,c2);
+        for (let c = lo; c <= hi; c++) s.add(`${c},${r1}`);
+      }
+    }
+  }
+  return s;
+}
+
+function setRoute(routeConfigIdx) {
+  const cfg = ROUTE_CONFIGS[routeConfigIdx % ROUTE_CONFIGS.length];
+  currentLanes = buildLanes(cfg);
+  PATH_SET     = buildPathSet(currentLanes);
+  // Refund and remove towers that now sit on the new path
+  if (state) {
+    state.towers = state.towers.filter(t => {
+      if (PATH_SET.has(`${t.c},${t.r}`)) {
+        state.credits += Math.floor(TOWER_DEFS[t.type].cost * 0.5);
+        return false;
+      }
+      return true;
+    });
+  }
+}
 
 // Enemy types
 const ENEMY_DEFS = {
@@ -247,21 +308,6 @@ const WAVE_DEFS = [
    { type:'tank',    count:3,  interval:110, tier:2 }],
 ];
 
-// ─── Path tile set ────────────────────────────────────────────────────────────
-const PATH_SET = (() => {
-  const s = new Set();
-  for (let i = 0; i < RAW_WP.length - 1; i++) {
-    const [c1,r1] = RAW_WP[i], [c2,r2] = RAW_WP[i+1];
-    if (c1 === c2) {
-      const lo = Math.min(r1,r2), hi = Math.max(r1,r2);
-      for (let r = lo; r <= hi; r++) s.add(`${c1},${r}`);
-    } else {
-      const lo = Math.min(c1,c2), hi = Math.max(c1,c2);
-      for (let c = lo; c <= hi; c++) s.add(`${c},${r1}`);
-    }
-  }
-  return s;
-})();
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let state, particles, animId;
@@ -338,46 +384,50 @@ function drawGrid() {
 }
 
 function drawPathLine() {
-  ctx.strokeStyle = 'rgba(180,130,60,0.25)';
-  ctx.lineWidth   = TILE * 0.55;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  ctx.beginPath();
-  PX_WP.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
-  ctx.stroke();
-  ctx.lineCap   = 'butt';
-  ctx.lineJoin  = 'miter';
+  for (const lane of currentLanes) {
+    ctx.strokeStyle = 'rgba(180,130,60,0.25)';
+    ctx.lineWidth   = TILE * 0.8;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    lane.px.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    ctx.stroke();
+    ctx.lineCap  = 'butt';
+    ctx.lineJoin = 'miter';
 
-  // Centre arrow indicators
-  ctx.fillStyle = 'rgba(255,220,100,0.22)';
-  ctx.font      = '11px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  for (let i = 0; i < RAW_WP.length - 1; i++) {
-    const [c1,r1] = RAW_WP[i], [c2,r2] = RAW_WP[i+1];
-    const mx = ((c1+c2)/2)*TILE + TILE/2;
-    const my = ((r1+r2)/2)*TILE + TILE/2;
-    const arrow = c2>c1 ? '→' : c2<c1 ? '←' : r2>r1 ? '↓' : '↑';
-    ctx.fillText(arrow, mx, my);
+    // Centre arrow indicators
+    ctx.fillStyle    = 'rgba(255,220,100,0.22)';
+    ctx.font         = '11px Arial';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < lane.raw.length - 1; i++) {
+      const [c1,r1] = lane.raw[i], [c2,r2] = lane.raw[i+1];
+      const mx = ((c1+c2)/2)*TILE + TILE/2;
+      const my = ((r1+r2)/2)*TILE + TILE/2;
+      const arrow = c2>c1 ? '→' : c2<c1 ? '←' : r2>r1 ? '↓' : '↑';
+      ctx.fillText(arrow, mx, my);
+    }
   }
 }
 
 function drawStartEnd() {
-  const [sc,sr] = RAW_WP[0];
-  const [ec,er] = RAW_WP[RAW_WP.length-1];
-
-  ctx.fillStyle = 'rgba(0,220,80,0.28)';
-  ctx.fillRect(sc*TILE, sr*TILE, TILE, TILE);
-  ctx.fillStyle = 'rgba(220,40,40,0.28)';
-  ctx.fillRect(ec*TILE, er*TILE, TILE, TILE);
-
-  ctx.font = 'bold 10px Arial';
+  ctx.font         = 'bold 10px Arial';
   ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#88ffaa';
-  ctx.fillText('IN',   sc*TILE+TILE/2, sr*TILE+TILE/2);
-  ctx.fillStyle = '#ffaaaa';
-  ctx.fillText('BASE', ec*TILE+TILE/2, er*TILE+TILE/2);
+  for (const lane of currentLanes) {
+    const [sc,sr] = lane.raw[0];
+    const [ec,er] = lane.raw[lane.raw.length - 1];
+
+    ctx.fillStyle = 'rgba(0,220,80,0.28)';
+    ctx.fillRect(sc*TILE, sr*TILE, TILE, TILE);
+    ctx.fillStyle = '#88ffaa';
+    ctx.fillText('IN', sc*TILE+TILE/2, sr*TILE+TILE/2);
+
+    ctx.fillStyle = 'rgba(220,40,40,0.28)';
+    ctx.fillRect(ec*TILE, er*TILE, TILE, TILE);
+    ctx.fillStyle = '#ffaaaa';
+    ctx.fillText('BASE', ec*TILE+TILE/2, er*TILE+TILE/2);
+  }
 }
 
 function drawHoverHighlight() {
@@ -451,6 +501,18 @@ function drawEnemy(e) {
   const mod = TIER_MODS[e.tier];
   const sz  = e.size;
 
+  // Compute render position with perpendicular side offset for parallel travel
+  let rx = e.x, ry = e.y;
+  if (e.sideOffset && e.wpIdx < e.lane.px.length) {
+    const [wx, wy] = e.lane.px[e.wpIdx];
+    const dx = wx - e.x, dy = wy - e.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 0.1) {
+      rx = e.x + (-dy / dist) * e.sideOffset;
+      ry = e.y + ( dx / dist) * e.sideOffset;
+    }
+  }
+
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
@@ -480,7 +542,7 @@ function drawEnemy(e) {
   ctx.font         = `bold ${sz - 1}px Arial`;
   ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(def.label, e.x, e.y);
+  ctx.fillText(def.label, rx, ry);
 
   // Tier badge (▲ or ★) drawn top-right of the enemy
   if (mod.badge) {
@@ -552,6 +614,8 @@ function spawnEnemy(type, tier = 0) {
     wpIdx: 1,
     flash: 0,
     id: Math.random(),
+    lane,
+    sideOffset,
   });
 }
 
@@ -592,13 +656,14 @@ function towerUpdate(t) {
 // Returns true to keep, false to remove
 function enemyUpdate(e) {
   if (e.flash > 0) e.flash--;
-  if (e.wpIdx >= PX_WP.length) {
+  const pxWp = e.lane.px;
+  if (e.wpIdx >= pxWp.length) {
     // Reached the base
     state.health = Math.max(0, state.health - e.dmgOnLeak);
     state.leaked++;
     return false;
   }
-  const [wx, wy] = PX_WP[e.wpIdx];
+  const [wx, wy] = pxWp[e.wpIdx];
   const dx = wx - e.x, dy = wy - e.y;
   const dist = Math.hypot(dx, dy);
   if (dist < e.speed) {
@@ -679,7 +744,15 @@ function waveComplete() {
   }
   const bonus = 50 + state.wave * 20;
   state.credits += bonus;
-  setMsg(`Wave ${state.wave} cleared! Bonus +${bonus} credits.`, 'good');
+
+  // Change route after every second wave
+  if (state.wave % 2 === 0) {
+    const newRouteIdx = Math.floor(state.wave / 2);
+    setRoute(newRouteIdx);
+    setMsg(`Wave ${state.wave} cleared! +${bonus} credits. ⚠ Enemy route changed!`, 'warn');
+  } else {
+    setMsg(`Wave ${state.wave} cleared! Bonus +${bonus} credits.`, 'good');
+  }
   updateUI();
 }
 
@@ -737,8 +810,10 @@ function showOverlay(title, msg) {
 
 function restartGame() {
   document.getElementById('overlay').classList.remove('show');
-  particles = [];
-  state     = mkState();
+  particles    = [];
+  spawnLaneIdx = 0;
+  state        = mkState();
+  setRoute(0);
   document.querySelectorAll('.tower-card').forEach(el => el.classList.remove('selected'));
   setMsg('Select a tower type, then click a green tile to build.');
   updateUI();
@@ -820,6 +895,7 @@ for (const type of Object.keys(TOWER_DEFS)) {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 particles = [];
 state     = mkState();
+setRoute(0);
 updateUI();
 gameLoop();
 </script>
