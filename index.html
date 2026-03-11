@@ -196,12 +196,73 @@ const TOWER_DEFS = {
   cannon: { name:'Cannon', color:'#ffaa44', cost:200, ammo:10, damage:8, range:2.5, rate:110, bSpeed:3, bRadius:7  },
 };
 
-// Waypoints as [col, row] — rectilinear winding path left → right
-const RAW_WP = [
-  [0,6],[4,6],[4,2],[8,2],[8,10],[12,10],[12,4],[16,4],[16,8],[19,8]
+// ─── Multi-route configuration ─────────────────────────────────────────────────
+// Each route has multiple lanes (sub-paths). Routes change every 2 waves.
+// Each lane = array of [col, row] waypoints.
+const ROUTE_CONFIGS = [
+  // Route 0 (Waves 1-2): Two parallel S-curves (no crossing)
+  [
+    [[0,4],[5,4],[5,2],[12,2],[12,6],[17,6],[17,4],[19,4]],
+    [[0,9],[5,9],[5,11],[12,11],[12,7],[17,7],[17,9],[19,9]],
+  ],
+  // Route 1 (Waves 3-4): Two crossing paths, different start & end points
+  [
+    [[0,3],[8,3],[8,10],[19,10]],
+    [[0,10],[11,10],[11,3],[19,3]],
+  ],
+  // Route 2 (Waves 5-6): Three lanes with multiple intersections
+  [
+    [[0,2],[5,2],[5,11],[14,11],[14,5],[19,5]],
+    [[0,7],[10,7],[10,1],[19,1]],
+    [[0,11],[7,11],[7,4],[19,4]],
+  ],
 ];
-// Pixel centres of each waypoint
-const PX_WP = RAW_WP.map(([c,r]) => [c*TILE + TILE/2, r*TILE + TILE/2]);
+
+// Active route state — updated by setRoute()
+let currentLanes = [];   // [{ raw: [[c,r],...], px: [[x,y],...] }]
+let PATH_SET     = new Set();
+let spawnLaneIdx = 0;
+const SIDE_OFFSETS = [-8, 0, 8];  // lateral pixel offsets for parallel travel
+
+function buildLanes(rawConfig) {
+  return rawConfig.map(raw => ({
+    raw,
+    px: raw.map(([c,r]) => [c*TILE + TILE/2, r*TILE + TILE/2]),
+  }));
+}
+
+function buildPathSet(lanes) {
+  const s = new Set();
+  for (const lane of lanes) {
+    for (let i = 0; i < lane.raw.length - 1; i++) {
+      const [c1,r1] = lane.raw[i], [c2,r2] = lane.raw[i+1];
+      if (c1 === c2) {
+        const lo = Math.min(r1,r2), hi = Math.max(r1,r2);
+        for (let r = lo; r <= hi; r++) s.add(`${c1},${r}`);
+      } else {
+        const lo = Math.min(c1,c2), hi = Math.max(c1,c2);
+        for (let c = lo; c <= hi; c++) s.add(`${c},${r1}`);
+      }
+    }
+  }
+  return s;
+}
+
+function setRoute(routeConfigIdx) {
+  const cfg = ROUTE_CONFIGS[routeConfigIdx % ROUTE_CONFIGS.length];
+  currentLanes = buildLanes(cfg);
+  PATH_SET     = buildPathSet(currentLanes);
+  // Refund and remove towers that now sit on the new path
+  if (state) {
+    state.towers = state.towers.filter(t => {
+      if (PATH_SET.has(`${t.c},${t.r}`)) {
+        state.credits += Math.floor(TOWER_DEFS[t.type].cost * 0.5);
+        return false;
+      }
+      return true;
+    });
+  }
+}
 
 // Enemy types
 const ENEMY_DEFS = {
@@ -220,21 +281,6 @@ const WAVE_DEFS = [
   [{ type:'tank',    count:6,  interval:80 }, { type:'soldier', count:12,interval:45 }, { type:'scout',count:15,interval:35 }],
 ];
 
-// ─── Path tile set ────────────────────────────────────────────────────────────
-const PATH_SET = (() => {
-  const s = new Set();
-  for (let i = 0; i < RAW_WP.length - 1; i++) {
-    const [c1,r1] = RAW_WP[i], [c2,r2] = RAW_WP[i+1];
-    if (c1 === c2) {
-      const lo = Math.min(r1,r2), hi = Math.max(r1,r2);
-      for (let r = lo; r <= hi; r++) s.add(`${c1},${r}`);
-    } else {
-      const lo = Math.min(c1,c2), hi = Math.max(c1,c2);
-      for (let c = lo; c <= hi; c++) s.add(`${c},${r1}`);
-    }
-  }
-  return s;
-})();
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let state, particles, animId, bgCache = null;
@@ -562,21 +608,23 @@ function drawPathLine() {
 }
 
 function drawStartEnd() {
-  const [sc,sr] = RAW_WP[0];
-  const [ec,er] = RAW_WP[RAW_WP.length-1];
-
-  ctx.fillStyle = 'rgba(0,220,80,0.28)';
-  ctx.fillRect(sc*TILE, sr*TILE, TILE, TILE);
-  ctx.fillStyle = 'rgba(220,40,40,0.28)';
-  ctx.fillRect(ec*TILE, er*TILE, TILE, TILE);
-
-  ctx.font = 'bold 10px Arial';
+  ctx.font         = 'bold 10px Arial';
   ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#88ffaa';
-  ctx.fillText('IN',   sc*TILE+TILE/2, sr*TILE+TILE/2);
-  ctx.fillStyle = '#ffaaaa';
-  ctx.fillText('BASE', ec*TILE+TILE/2, er*TILE+TILE/2);
+  for (const lane of currentLanes) {
+    const [sc,sr] = lane.raw[0];
+    const [ec,er] = lane.raw[lane.raw.length - 1];
+
+    ctx.fillStyle = 'rgba(0,220,80,0.28)';
+    ctx.fillRect(sc*TILE, sr*TILE, TILE, TILE);
+    ctx.fillStyle = '#88ffaa';
+    ctx.fillText('IN', sc*TILE+TILE/2, sr*TILE+TILE/2);
+
+    ctx.fillStyle = 'rgba(220,40,40,0.28)';
+    ctx.fillRect(ec*TILE, er*TILE, TILE, TILE);
+    ctx.fillStyle = '#ffaaaa';
+    ctx.fillText('BASE', ec*TILE+TILE/2, er*TILE+TILE/2);
+  }
 }
 
 function drawHoverHighlight() {
@@ -648,10 +696,22 @@ function drawTower(t) {
 function drawEnemy(e) {
   const def = ENEMY_DEFS[e.type];
 
+  // Compute render position with perpendicular side offset for parallel travel
+  let rx = e.x, ry = e.y;
+  if (e.sideOffset && e.wpIdx < e.lane.px.length) {
+    const [wx, wy] = e.lane.px[e.wpIdx];
+    const dx = wx - e.x, dy = wy - e.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 0.1) {
+      rx = e.x + (-dy / dist) * e.sideOffset;
+      ry = e.y + ( dx / dist) * e.sideOffset;
+    }
+  }
+
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(e.x, e.y + def.size + 3, def.size * 0.75, 4, 0, 0, Math.PI*2);
+  ctx.ellipse(rx, ry + def.size + 3, def.size * 0.75, 4, 0, 0, Math.PI*2);
   ctx.fill();
 
   // Body
@@ -659,7 +719,7 @@ function drawEnemy(e) {
   ctx.strokeStyle = 'rgba(0,0,0,0.5)';
   ctx.lineWidth   = 1.5;
   ctx.beginPath();
-  ctx.arc(e.x, e.y, def.size, 0, Math.PI*2);
+  ctx.arc(rx, ry, def.size, 0, Math.PI*2);
   ctx.fill();
   ctx.stroke();
 
@@ -668,15 +728,15 @@ function drawEnemy(e) {
   ctx.font         = `bold ${def.size - 1}px Arial`;
   ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(def.label, e.x, e.y);
+  ctx.fillText(def.label, rx, ry);
 
   // Health bar
   const bw  = def.size * 2.6;
   const pct = e.hp / e.maxHp;
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(e.x - bw/2, e.y - def.size - 8, bw, 4);
+  ctx.fillRect(rx - bw/2, ry - def.size - 8, bw, 4);
   ctx.fillStyle = pct > 0.6 ? '#3fb950' : pct > 0.3 ? '#ffa657' : '#ff4444';
-  ctx.fillRect(e.x - bw/2, e.y - def.size - 8, bw * pct, 4);
+  ctx.fillRect(rx - bw/2, ry - def.size - 8, bw * pct, 4);
 }
 
 function drawBullet(b) {
@@ -715,8 +775,11 @@ function buildSpawnQueue(waveIdx) {
 }
 
 function spawnEnemy(type) {
-  const def = ENEMY_DEFS[type];
-  const [sx, sy] = PX_WP[0];
+  const def  = ENEMY_DEFS[type];
+  const lane = currentLanes[spawnLaneIdx % currentLanes.length];
+  const sideOffset = SIDE_OFFSETS[spawnLaneIdx % SIDE_OFFSETS.length];
+  spawnLaneIdx++;
+  const [sx, sy] = lane.px[0];
   state.enemies.push({
     type, x: sx, y: sy,
     hp: def.hp, maxHp: def.hp,
@@ -724,6 +787,8 @@ function spawnEnemy(type) {
     wpIdx: 1,
     flash: 0,
     id: Math.random(),
+    lane,
+    sideOffset,
   });
 }
 
@@ -764,14 +829,15 @@ function towerUpdate(t) {
 // Returns true to keep, false to remove
 function enemyUpdate(e) {
   if (e.flash > 0) e.flash--;
-  if (e.wpIdx >= PX_WP.length) {
+  const pxWp = e.lane.px;
+  if (e.wpIdx >= pxWp.length) {
     // Reached the base
     const dmg = ENEMY_DEFS[e.type].dmgOnLeak;
     state.health = Math.max(0, state.health - dmg);
     state.leaked++;
     return false;
   }
-  const [wx, wy] = PX_WP[e.wpIdx];
+  const [wx, wy] = pxWp[e.wpIdx];
   const dx = wx - e.x, dy = wy - e.y;
   const dist = Math.hypot(dx, dy);
   if (dist < e.speed) {
@@ -852,7 +918,15 @@ function waveComplete() {
   }
   const bonus = 50 + state.wave * 20;
   state.credits += bonus;
-  setMsg(`Wave ${state.wave} cleared! Bonus +${bonus} credits.`, 'good');
+
+  // Change route after every second wave
+  if (state.wave % 2 === 0) {
+    const newRouteIdx = Math.floor(state.wave / 2);
+    setRoute(newRouteIdx);
+    setMsg(`Wave ${state.wave} cleared! +${bonus} credits. ⚠ Enemy route changed!`, 'warn');
+  } else {
+    setMsg(`Wave ${state.wave} cleared! Bonus +${bonus} credits.`, 'good');
+  }
   updateUI();
 }
 
@@ -909,8 +983,10 @@ function showOverlay(title, msg) {
 
 function restartGame() {
   document.getElementById('overlay').classList.remove('show');
-  particles = [];
-  state     = mkState();
+  particles    = [];
+  spawnLaneIdx = 0;
+  state        = mkState();
+  setRoute(0);
   document.querySelectorAll('.tower-card').forEach(el => el.classList.remove('selected'));
   setMsg('Select a tower type, then click a green tile to build.');
   updateUI();
@@ -992,6 +1068,7 @@ for (const type of Object.keys(TOWER_DEFS)) {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 particles = [];
 state     = mkState();
+setRoute(0);
 updateUI();
 gameLoop();
 </script>
