@@ -120,7 +120,7 @@ canvas { border: 2px solid #30363d; border-radius: 4px; display: block; }
 </head>
 <body>
 <h1>⚡ SneakAttack</h1>
-<p class="subtitle">Place towers · Defend the base · Survive 6 waves</p>
+<p class="subtitle">Place towers · Defend the base · Survive 8 waves</p>
 
 <div id="game-wrap">
   <canvas id="canvas"></canvas>
@@ -167,7 +167,9 @@ canvas { border: 2px solid #30363d; border-radius: 4px; display: block; }
       <div class="section-label">Legend</div>
       <div class="legend-item"><div class="l-dot" style="background:#5c4a2a;"></div>Enemy path</div>
       <div class="legend-item"><div class="l-dot" style="background:#1a2a1a;"></div>Buildable tile</div>
-      <div class="legend-item"><div class="l-dot" style="background:#ff4444;border-radius:50%;"></div>Enemy (S/M/T)</div>
+      <div class="legend-item"><div class="l-dot" style="background:#ff4444;border-radius:50%;"></div>Normal (S/M/T)</div>
+      <div class="legend-item"><div class="l-dot" style="background:#ff4444;border:2px solid #f9ca24;border-radius:50%;"></div>Veteran ▲</div>
+      <div class="legend-item"><div class="l-dot" style="background:#ff4444;border:2px solid #be2edd;border-radius:50%;"></div>Elite ★</div>
       <div class="legend-item"><div class="l-dot" style="background:#44ff44;"></div>Wave entry</div>
       <div class="legend-item"><div class="l-dot" style="background:#ff4444;"></div>Your base</div>
     </div>
@@ -210,14 +212,39 @@ const ENEMY_DEFS = {
   tank:    { hp:25, speed:0.6, color:'#ee5a24', size:16, reward:60,  dmgOnLeak:3, label:'T' },
 };
 
-// 6 progressively harder waves
+// Tier modifiers: enemies mature as rounds progress (tier 0=normal, 1=veteran, 2=elite)
+const TIER_MODS = [
+  { hpMult:1.0, speedMult:1.0, sizeMod: 0, rewardMult:1.0, dmgMult:1.0, ring:null,      badge:'' },
+  { hpMult:2.5, speedMult:1.3, sizeMod: 3, rewardMult:2.0, dmgMult:2.0, ring:'#f9ca24', badge:'▲' },
+  { hpMult:5.0, speedMult:1.6, sizeMod: 6, rewardMult:4.0, dmgMult:3.0, ring:'#be2edd', badge:'★' },
+];
+
+// 8 progressively harder waves — later waves mix fodder with veteran/elite enemies
 const WAVE_DEFS = [
-  [{ type:'scout',   count:6,  interval:60 }],
-  [{ type:'scout',   count:8,  interval:50 }, { type:'soldier', count:3, interval:80 }],
-  [{ type:'scout',   count:10, interval:45 }, { type:'soldier', count:5, interval:60 }],
-  [{ type:'soldier', count:8,  interval:55 }, { type:'tank',    count:2, interval:120 }],
-  [{ type:'scout',   count:12, interval:40 }, { type:'soldier', count:8, interval:50 }, { type:'tank', count:3, interval:100 }],
-  [{ type:'tank',    count:6,  interval:80 }, { type:'soldier', count:12,interval:45 }, { type:'scout',count:15,interval:35 }],
+  // Wave 1 – basic scouts only
+  [{ type:'scout',   count:6,  interval:60, tier:0 }],
+  // Wave 2 – scouts + rookie soldiers
+  [{ type:'scout',   count:8,  interval:50, tier:0 }, { type:'soldier', count:3, interval:80, tier:0 }],
+  // Wave 3 – veteran scouts debut alongside regular fodder
+  [{ type:'scout',   count:8,  interval:45, tier:0 }, { type:'scout',   count:3, interval:65, tier:1 },
+   { type:'soldier', count:4,  interval:60, tier:0 }],
+  // Wave 4 – veteran soldiers + normal tanks, scouts as fodder
+  [{ type:'scout',   count:10, interval:40, tier:0 }, { type:'soldier', count:5, interval:55, tier:0 },
+   { type:'soldier', count:3,  interval:75, tier:1 }, { type:'tank',    count:2, interval:120, tier:0 }],
+  // Wave 5 – veteran tanks arrive; fodder scouts soak tower ammo
+  [{ type:'scout',   count:12, interval:38, tier:0 }, { type:'soldier', count:4, interval:55, tier:1 },
+   { type:'tank',    count:2,  interval:110, tier:0 }, { type:'tank',   count:2, interval:120, tier:1 }],
+  // Wave 6 – elite scouts, veteran soldiers & tanks, heavy fodder
+  [{ type:'scout',   count:15, interval:35, tier:0 }, { type:'scout',   count:4, interval:50, tier:2 },
+   { type:'soldier', count:8,  interval:50, tier:1 }, { type:'tank',    count:3, interval:90, tier:1 }],
+  // Wave 7 – elite soldiers & tanks; veterans everywhere; scouts as cannon fodder
+  [{ type:'scout',   count:12, interval:35, tier:0 }, { type:'soldier', count:5, interval:55, tier:1 },
+   { type:'soldier', count:4,  interval:65, tier:2 }, { type:'tank',    count:2, interval:100, tier:1 },
+   { type:'tank',    count:2,  interval:130, tier:2 }],
+  // Wave 8 – boss wave: elite everything alongside waves of weak fodder
+  [{ type:'scout',   count:20, interval:30, tier:0 }, { type:'scout',   count:5, interval:45, tier:1 },
+   { type:'soldier', count:6,  interval:55, tier:2 }, { type:'tank',    count:3, interval:90, tier:1 },
+   { type:'tank',    count:3,  interval:110, tier:2 }],
 ];
 
 // ─── Path tile set ────────────────────────────────────────────────────────────
@@ -421,36 +448,56 @@ function drawTower(t) {
 
 function drawEnemy(e) {
   const def = ENEMY_DEFS[e.type];
+  const mod = TIER_MODS[e.tier];
+  const sz  = e.size;
 
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(e.x, e.y + def.size + 3, def.size * 0.75, 4, 0, 0, Math.PI*2);
+  ctx.ellipse(e.x, e.y + sz + 3, sz * 0.75, 4, 0, 0, Math.PI*2);
   ctx.fill();
+
+  // Tier ring (veteran = gold, elite = purple)
+  if (mod.ring) {
+    ctx.strokeStyle = mod.ring;
+    ctx.lineWidth   = 3;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, sz + 4, 0, Math.PI*2);
+    ctx.stroke();
+  }
 
   // Body
   ctx.fillStyle   = e.flash > 0 ? '#fff' : def.color;
   ctx.strokeStyle = 'rgba(0,0,0,0.5)';
   ctx.lineWidth   = 1.5;
   ctx.beginPath();
-  ctx.arc(e.x, e.y, def.size, 0, Math.PI*2);
+  ctx.arc(e.x, e.y, sz, 0, Math.PI*2);
   ctx.fill();
   ctx.stroke();
 
   // Label
   ctx.fillStyle    = '#000';
-  ctx.font         = `bold ${def.size - 1}px Arial`;
+  ctx.font         = `bold ${sz - 1}px Arial`;
   ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(def.label, e.x, e.y);
 
+  // Tier badge (▲ or ★) drawn top-right of the enemy
+  if (mod.badge) {
+    ctx.fillStyle    = mod.ring;
+    ctx.font         = `bold ${sz - 2}px Arial`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(mod.badge, e.x + sz + 2, e.y - sz);
+  }
+
   // Health bar
-  const bw  = def.size * 2.6;
+  const bw  = sz * 2.6;
   const pct = e.hp / e.maxHp;
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(e.x - bw/2, e.y - def.size - 8, bw, 4);
+  ctx.fillRect(e.x - bw/2, e.y - sz - 8, bw, 4);
   ctx.fillStyle = pct > 0.6 ? '#3fb950' : pct > 0.3 ? '#ffa657' : '#ff4444';
-  ctx.fillRect(e.x - bw/2, e.y - def.size - 8, bw * pct, 4);
+  ctx.fillRect(e.x - bw/2, e.y - sz - 8, bw * pct, 4);
 }
 
 function drawBullet(b) {
@@ -480,21 +527,28 @@ function drawParticles() {
 function buildSpawnQueue(waveIdx) {
   const queue = [];
   for (const group of WAVE_DEFS[waveIdx]) {
+    const tier = group.tier ?? 0;
     for (let i = 0; i < group.count; i++) {
-      queue.push({ type: group.type, delay: group.interval * i });
+      queue.push({ type: group.type, tier, delay: group.interval * i });
     }
   }
   queue.sort((a, b) => a.delay - b.delay);
   return queue;
 }
 
-function spawnEnemy(type) {
+function spawnEnemy(type, tier = 0) {
   const def = ENEMY_DEFS[type];
+  const mod = TIER_MODS[tier];
   const [sx, sy] = PX_WP[0];
+  const hp = Math.round(def.hp * mod.hpMult);
   state.enemies.push({
-    type, x: sx, y: sy,
-    hp: def.hp, maxHp: def.hp,
-    speed: def.speed,
+    type, tier,
+    x: sx, y: sy,
+    hp, maxHp: hp,
+    speed:     def.speed * mod.speedMult,
+    size:      def.size  + mod.sizeMod,
+    dmgOnLeak: Math.max(1, Math.round(def.dmgOnLeak * mod.dmgMult)),
+    reward:    Math.round(def.reward    * mod.rewardMult),
     wpIdx: 1,
     flash: 0,
     id: Math.random(),
@@ -540,8 +594,7 @@ function enemyUpdate(e) {
   if (e.flash > 0) e.flash--;
   if (e.wpIdx >= PX_WP.length) {
     // Reached the base
-    const dmg = ENEMY_DEFS[e.type].dmgOnLeak;
-    state.health = Math.max(0, state.health - dmg);
+    state.health = Math.max(0, state.health - e.dmgOnLeak);
     state.leaked++;
     return false;
   }
@@ -569,7 +622,7 @@ function bulletUpdate(b) {
     b.target.flash  = 7;
     if (b.target.hp <= 0) {
       spawnParticles(b.target.x, b.target.y, ENEMY_DEFS[b.target.type].color);
-      state.credits += ENEMY_DEFS[b.target.type].reward;
+      state.credits += b.target.reward;
       state.kills++;
     }
     return false;
@@ -649,7 +702,8 @@ function gameLoop() {
 
     // Drain spawn queue
     while (state.spawnQueue.length && state.spawnQueue[0].delay <= state.spawnTimer) {
-      spawnEnemy(state.spawnQueue.shift().type);
+      const entry = state.spawnQueue.shift();
+      spawnEnemy(entry.type, entry.tier);
     }
 
     state.towers.forEach(towerUpdate);
