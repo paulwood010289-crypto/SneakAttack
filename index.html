@@ -252,6 +252,7 @@ function setRoute(routeConfigIdx) {
   const cfg = ROUTE_CONFIGS[routeConfigIdx % ROUTE_CONFIGS.length];
   currentLanes = buildLanes(cfg);
   PATH_SET     = buildPathSet(currentLanes);
+  bgCache      = null;  // rebuild background with updated sandy/alien tile layout
   // Refund and remove towers that now sit on the new path
   if (state) {
     state.towers = state.towers.filter(t => {
@@ -574,36 +575,39 @@ function drawGrid() {
 }
 
 function drawPathLine() {
-  // Warm worn-center highlight along the sandy walkway
-  ctx.strokeStyle = 'rgba(215,178,98,0.16)';
-  ctx.lineWidth   = TILE * 0.42;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  ctx.beginPath();
-  PX_WP.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
-  ctx.stroke();
-
-  // Thin bright center spine — shows enemy travel lane
-  ctx.strokeStyle = 'rgba(235,195,115,0.12)';
-  ctx.lineWidth   = TILE * 0.18;
-  ctx.beginPath();
-  PX_WP.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
-  ctx.stroke();
-
-  ctx.lineCap  = 'butt';
-  ctx.lineJoin = 'miter';
-
-  // Direction markers — earthy amber tone blending into the sand
-  ctx.fillStyle    = 'rgba(150,98,28,0.48)';
   ctx.font         = '11px Arial';
   ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
-  for (let i = 0; i < RAW_WP.length - 1; i++) {
-    const [c1,r1] = RAW_WP[i], [c2,r2] = RAW_WP[i+1];
-    const mx = ((c1+c2)/2)*TILE + TILE/2;
-    const my = ((r1+r2)/2)*TILE + TILE/2;
-    const arrow = c2>c1 ? '→' : c2<c1 ? '←' : r2>r1 ? '↓' : '↑';
-    ctx.fillText(arrow, mx, my);
+
+  for (const lane of currentLanes) {
+    // Warm worn-center highlight along the sandy walkway
+    ctx.strokeStyle = 'rgba(215,178,98,0.16)';
+    ctx.lineWidth   = TILE * 0.42;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    lane.px.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    ctx.stroke();
+
+    // Thin bright center spine — shows enemy travel lane
+    ctx.strokeStyle = 'rgba(235,195,115,0.12)';
+    ctx.lineWidth   = TILE * 0.18;
+    ctx.beginPath();
+    lane.px.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    ctx.stroke();
+
+    ctx.lineCap  = 'butt';
+    ctx.lineJoin = 'miter';
+
+    // Direction markers — earthy amber tone blending into the sand
+    ctx.fillStyle = 'rgba(150,98,28,0.48)';
+    for (let i = 0; i < lane.raw.length - 1; i++) {
+      const [c1,r1] = lane.raw[i], [c2,r2] = lane.raw[i+1];
+      const mx = ((c1+c2)/2)*TILE + TILE/2;
+      const my = ((r1+r2)/2)*TILE + TILE/2;
+      const arrow = c2>c1 ? '→' : c2<c1 ? '←' : r2>r1 ? '↓' : '↑';
+      ctx.fillText(arrow, mx, my);
+    }
   }
 }
 
