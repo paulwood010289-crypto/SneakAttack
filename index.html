@@ -167,9 +167,11 @@ canvas { border: 2px solid #30363d; border-radius: 4px; display: block; }
       <div class="section-label">Legend</div>
       <div class="legend-item"><div class="l-dot" style="background:#5c4a2a;"></div>Enemy path</div>
       <div class="legend-item"><div class="l-dot" style="background:#1a2a1a;"></div>Buildable tile</div>
-      <div class="legend-item"><div class="l-dot" style="background:#ff4444;border-radius:50%;"></div>Normal (S/M/T)</div>
-      <div class="legend-item"><div class="l-dot" style="background:#ff4444;border:2px solid #f9ca24;border-radius:50%;"></div>Veteran ▲</div>
-      <div class="legend-item"><div class="l-dot" style="background:#ff4444;border:2px solid #be2edd;border-radius:50%;"></div>Elite ★</div>
+      <div class="legend-item"><div class="l-dot" style="background:#ff6b6b;border-radius:50%;"></div>Scout (antennae)</div>
+      <div class="legend-item"><div class="l-dot" style="background:#ff9f43;border-radius:3px;"></div>Soldier (visor)</div>
+      <div class="legend-item"><div class="l-dot" style="background:#ee5a24;border-radius:50%;"></div>Tank (horns)</div>
+      <div class="legend-item"><div class="l-dot" style="background:#888;border:2px solid #f9ca24;border-radius:50%;"></div>Veteran ▲</div>
+      <div class="legend-item"><div class="l-dot" style="background:#888;border:2px solid #be2edd;border-radius:50%;"></div>Elite ★</div>
       <div class="legend-item"><div class="l-dot" style="background:#44ff44;"></div>Wave entry</div>
       <div class="legend-item"><div class="l-dot" style="background:#ff4444;"></div>Your base</div>
     </div>
@@ -724,6 +726,187 @@ function drawTower(t) {
   ctx.fillRect(bx, by, Math.max(0, bw * pct), 5);
 }
 
+// ─── Alien shapes ─────────────────────────────────────────────────────────────
+// Scout: nimble alien with large almond eyes, slim body, antennae, spread legs
+function drawAlienScout(x, y, sz, color) {
+  ctx.save();
+  ctx.lineCap  = 'round';
+  ctx.lineJoin = 'round';
+
+  // Antennae
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, sz * 0.12);
+  ctx.beginPath();
+  ctx.moveTo(x - sz*0.2,  y - sz*0.72);
+  ctx.lineTo(x - sz*0.45, y - sz*1.22);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + sz*0.2,  y - sz*0.72);
+  ctx.lineTo(x + sz*0.45, y - sz*1.22);
+  ctx.stroke();
+  // Antenna tips
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath(); ctx.arc(x - sz*0.45, y - sz*1.22, sz*0.12, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x + sz*0.45, y - sz*1.22, sz*0.12, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+  // Legs (thin, spread)
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = Math.max(1.5, sz * 0.22);
+  ctx.beginPath(); ctx.moveTo(x - sz*0.14, y + sz*0.44); ctx.lineTo(x - sz*0.38, y + sz*0.92); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + sz*0.14, y + sz*0.44); ctx.lineTo(x + sz*0.38, y + sz*0.92); ctx.stroke();
+
+  // Body (slim ellipse)
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(x, y + sz*0.1, sz*0.28, sz*0.4, 0, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+
+  // Arms (thin, angled up and outward)
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = Math.max(1.5, sz * 0.2);
+  ctx.beginPath(); ctx.moveTo(x - sz*0.28, y - sz*0.05); ctx.lineTo(x - sz*0.72, y - sz*0.28); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + sz*0.28, y - sz*0.05); ctx.lineTo(x + sz*0.72, y - sz*0.28); ctx.stroke();
+
+  // Head (tall oval)
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(x, y - sz*0.6, sz*0.42, sz*0.35, 0, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+
+  // Eyes (large almond — hallmark of scouts)
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(x - sz*0.17, y - sz*0.62, sz*0.14, sz*0.18, -0.3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x + sz*0.17, y - sz*0.62, sz*0.14, sz*0.18,  0.3, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath(); ctx.arc(x - sz*0.12, y - sz*0.68, sz*0.05, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + sz*0.22, y - sz*0.68, sz*0.05, 0, Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
+// Soldier: armoured warrior with boxy helmet, visor slit, shoulder pads, bent arms
+function drawAlienSoldier(x, y, sz, color) {
+  ctx.save();
+  ctx.lineCap  = 'round';
+  ctx.lineJoin = 'round';
+
+  // Legs (stocky)
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = Math.max(2, sz * 0.3);
+  ctx.beginPath(); ctx.moveTo(x - sz*0.2, y + sz*0.44); ctx.lineTo(x - sz*0.28, y + sz*0.9); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + sz*0.2, y + sz*0.44); ctx.lineTo(x + sz*0.28, y + sz*0.9); ctx.stroke();
+
+  // Body (armoured rectangle)
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x - sz*0.38, y - sz*0.15, sz*0.76, sz*0.62, sz*0.08);
+  ctx.fill(); ctx.stroke();
+  // Chest-plate seam
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath(); ctx.moveTo(x, y - sz*0.12); ctx.lineTo(x, y + sz*0.42); ctx.stroke();
+
+  // Shoulder pads
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath(); ctx.ellipse(x - sz*0.46, y - sz*0.06, sz*0.18, sz*0.13, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(x + sz*0.46, y - sz*0.06, sz*0.18, sz*0.13, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+  // Arms (L-shaped, bent elbow)
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = Math.max(2, sz * 0.27);
+  ctx.beginPath(); ctx.moveTo(x - sz*0.44, y - sz*0.04); ctx.lineTo(x - sz*0.7, y + sz*0.18); ctx.lineTo(x - sz*0.72, y + sz*0.4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + sz*0.44, y - sz*0.04); ctx.lineTo(x + sz*0.7, y + sz*0.18); ctx.lineTo(x + sz*0.72, y + sz*0.4); ctx.stroke();
+
+  // Head (boxy helmet)
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x - sz*0.32, y - sz*0.88, sz*0.64, sz*0.48, sz*0.06);
+  ctx.fill(); ctx.stroke();
+
+  // Visor slit — hallmark of soldiers
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.roundRect(x - sz*0.24, y - sz*0.72, sz*0.48, sz*0.14, sz*0.04);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,80,0,0.85)';
+  ctx.beginPath();
+  ctx.roundRect(x - sz*0.19, y - sz*0.7, sz*0.38, sz*0.08, sz*0.02);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// Tank: heavy beast with dome head, twin horns, wide squat body, stubby limbs, cyclops eye
+function drawAlienTank(x, y, sz, color) {
+  ctx.save();
+  ctx.lineCap  = 'round';
+  ctx.lineJoin = 'round';
+
+  // Legs (wide stubby pillars)
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = Math.max(3, sz * 0.42);
+  ctx.beginPath(); ctx.moveTo(x - sz*0.28, y + sz*0.42); ctx.lineTo(x - sz*0.32, y + sz*0.86); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + sz*0.28, y + sz*0.42); ctx.lineTo(x + sz*0.32, y + sz*0.86); ctx.stroke();
+
+  // Body (very wide, squat)
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x - sz*0.55, y - sz*0.18, sz*1.1, sz*0.65, sz*0.1);
+  ctx.fill(); ctx.stroke();
+  // Armour panel lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - sz*0.2, y - sz*0.15); ctx.lineTo(x - sz*0.2, y + sz*0.42);
+  ctx.moveTo(x + sz*0.2, y - sz*0.15); ctx.lineTo(x + sz*0.2, y + sz*0.42);
+  ctx.stroke();
+
+  // Arm stubs (very short, very thick)
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = Math.max(3, sz * 0.38);
+  ctx.beginPath(); ctx.moveTo(x - sz*0.55, y + sz*0.07); ctx.lineTo(x - sz*0.88, y + sz*0.07); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + sz*0.55, y + sz*0.07); ctx.lineTo(x + sz*0.88, y + sz*0.07); ctx.stroke();
+
+  // Head (large dome)
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y - sz*0.5, sz*0.48, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+
+  // Horns — hallmark of tanks
+  ctx.fillStyle   = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath(); ctx.moveTo(x - sz*0.28, y - sz*0.84); ctx.lineTo(x - sz*0.46, y - sz*1.18); ctx.lineTo(x - sz*0.16, y - sz*0.9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + sz*0.28, y - sz*0.84); ctx.lineTo(x + sz*0.46, y - sz*1.18); ctx.lineTo(x + sz*0.16, y - sz*0.9); ctx.closePath(); ctx.fill(); ctx.stroke();
+
+  // Single cyclops eye
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(x, y - sz*0.5, sz*0.24, sz*0.15, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(50,255,100,0.9)';
+  ctx.beginPath(); ctx.ellipse(x, y - sz*0.5, sz*0.16, sz*0.08, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.beginPath(); ctx.arc(x + sz*0.07, y - sz*0.55, sz*0.05, 0, Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
 function drawEnemy(e) {
   const def = ENEMY_DEFS[e.type];
   const mod = TIER_MODS[e.tier];
@@ -744,7 +927,7 @@ function drawEnemy(e) {
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(e.x, e.y + sz + 3, sz * 0.75, 4, 0, 0, Math.PI*2);
+  ctx.ellipse(rx, ry + sz * 0.98, sz * 0.75, 4, 0, 0, Math.PI*2);
   ctx.fill();
 
   // Tier ring (veteran = gold, elite = purple)
@@ -752,25 +935,15 @@ function drawEnemy(e) {
     ctx.strokeStyle = mod.ring;
     ctx.lineWidth   = 3;
     ctx.beginPath();
-    ctx.arc(e.x, e.y, sz + 4, 0, Math.PI*2);
+    ctx.arc(rx, ry, sz + 4, 0, Math.PI*2);
     ctx.stroke();
   }
 
-  // Body
-  ctx.fillStyle   = e.flash > 0 ? '#fff' : def.color;
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineWidth   = 1.5;
-  ctx.beginPath();
-  ctx.arc(e.x, e.y, sz, 0, Math.PI*2);
-  ctx.fill();
-  ctx.stroke();
-
-  // Label
-  ctx.fillStyle    = '#000';
-  ctx.font         = `bold ${sz - 1}px Arial`;
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(def.label, rx, ry);
+  // Draw alien shape based on type
+  const color = e.flash > 0 ? '#fff' : def.color;
+  if (e.type === 'scout')        drawAlienScout(rx, ry, sz, color);
+  else if (e.type === 'soldier') drawAlienSoldier(rx, ry, sz, color);
+  else                           drawAlienTank(rx, ry, sz, color);
 
   // Tier badge (▲ or ★) drawn top-right of the enemy
   if (mod.badge) {
@@ -778,16 +951,17 @@ function drawEnemy(e) {
     ctx.font         = `bold ${sz - 2}px Arial`;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(mod.badge, e.x + sz + 2, e.y - sz);
+    ctx.fillText(mod.badge, rx + sz + 4, ry - sz);
   }
 
-  // Health bar
+  // Health bar (positioned above the alien's highest point)
   const bw  = sz * 2.6;
   const pct = e.hp / e.maxHp;
+  const barY = ry - sz * 1.45 - 6;
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(e.x - bw/2, e.y - sz - 8, bw, 4);
+  ctx.fillRect(rx - bw/2, barY, bw, 4);
   ctx.fillStyle = pct > 0.6 ? '#3fb950' : pct > 0.3 ? '#ffa657' : '#ff4444';
-  ctx.fillRect(e.x - bw/2, e.y - sz - 8, bw * pct, 4);
+  ctx.fillRect(rx - bw/2, barY, bw * pct, 4);
 }
 
 function drawBullet(b) {
