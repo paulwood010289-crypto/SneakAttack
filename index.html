@@ -220,6 +220,7 @@ const ROUTE_CONFIGS = [
 
 // Active route state — updated by setRoute()
 let currentLanes = [];   // [{ raw: [[c,r],...], px: [[x,y],...] }]
+let PX_WP        = [];   // Pixel waypoints for the primary lane (currentLanes[0].px)
 let PATH_SET     = new Set();
 let spawnLaneIdx = 0;
 const SIDE_OFFSETS = [-8, 0, 8];  // lateral pixel offsets for parallel travel
@@ -251,6 +252,7 @@ function buildPathSet(lanes) {
 function setRoute(routeConfigIdx) {
   const cfg = ROUTE_CONFIGS[routeConfigIdx % ROUTE_CONFIGS.length];
   currentLanes = buildLanes(cfg);
+  PX_WP        = currentLanes[0].px;   // pixel waypoints for the primary lane
   PATH_SET     = buildPathSet(currentLanes);
   bgCache      = null;  // rebuild background with updated sandy/alien tile layout
   // Refund and remove towers that now sit on the new path
