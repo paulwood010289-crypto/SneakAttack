@@ -1557,13 +1557,16 @@ function waveComplete() {
   const bonus = 50 + state.wave * 20;
   state.credits += bonus;
 
+  // Clear all towers — guns only last one wave; player re-places next wave
+  state.towers = [];
+
   // Change route after every second wave
   if (state.wave % 2 === 0) {
     const newRouteIdx = Math.floor(state.wave / 2);
     setRoute(newRouteIdx);
-    setMsg(`Wave ${state.wave} cleared! +${bonus} credits. ⚠ Enemy route changed!`, 'warn');
+    setMsg(`Wave ${state.wave} cleared! +${bonus} credits. ⚠ Enemy route changed! Place new guns.`, 'warn');
   } else {
-    setMsg(`Wave ${state.wave} cleared! Bonus +${bonus} credits.`, 'good');
+    setMsg(`Wave ${state.wave} cleared! Bonus +${bonus} credits. Place your guns for the next wave.`, 'good');
   }
   updateUI();
 }
