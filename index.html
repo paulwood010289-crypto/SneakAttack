@@ -18,7 +18,7 @@ body {
 h1 { color: #ff6b6b; font-size: 2rem; margin-bottom: 4px; text-shadow: 0 0 20px #ff6b6b44; }
 .subtitle { color: #8b949e; margin-bottom: 16px; font-size: 0.85rem; }
 #game-wrap { display: flex; gap: 16px; align-items: flex-start; }
-canvas { border: 2px solid #30363d; border-radius: 4px; display: block; }
+canvas { border: 2px solid #30363d; border-radius: 4px; display: block; width: 960px; height: 496px; }
 #panel {
   width: 220px;
   background: #161b22;
@@ -190,6 +190,27 @@ const ROWS = 14;
 const W = COLS * TILE;   // 960
 const H = ROWS * TILE;   // 672
 
+// ─── Isometric projection ─────────────────────────────────────────────────────
+// Classic 2:1 dimetric projection: world (wx,wy) → screen (sx,sy)
+//   sx = wx - wy + ISO_OX
+//   sy = (wx + wy) * 0.5 + ISO_OY
+const ISO_OX   = H;       // horizontal origin offset (= 672) so left edge starts at x=0
+const ISO_OY   = 12;      // small top margin
+const WALL_H   = 20;      // visible depth wall height in screen pixels
+const CANVAS_W = W + H;   // 1632 — wider to accommodate the angled view
+const CANVAS_H = Math.ceil((W + H) / 2) + WALL_H + ISO_OY; // ≈844
+
+function toIso(wx, wy) {
+  return { sx: wx - wy + ISO_OX, sy: (wx + wy) * 0.5 + ISO_OY };
+}
+
+// Inverse: screen pixel (sx,sy) → world pixel (wx,wy)
+function fromIso(sx, sy) {
+  const rx = sx - ISO_OX;
+  const ry = sy - ISO_OY;
+  return { wx: (rx + 2 * ry) / 2, wy: (2 * ry - rx) / 2 };
+}
+
 const TOWER_DEFS = {
   pistol: { name:'Pistol', color:'#4a9eff', cost:50,  ammo:30, damage:1, range:2.0, rate:50,  bSpeed:4, bRadius:4  },
   rifle:  { name:'Rifle',  color:'#4aff7a', cost:100, ammo:20, damage:3, range:3.5, rate:70,  bSpeed:6, bRadius:4  },
@@ -310,8 +331,8 @@ function mkState() {
 // ─── Canvas ───────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
-canvas.width  = W;
-canvas.height = H;
+canvas.width  = CANVAS_W;
+canvas.height = CANVAS_H;
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 function setMsg(text, cls = '') {
@@ -356,8 +377,15 @@ function seededRand(n) {
 // Build an offscreen canvas with rich alien terrain + sandy path textures
 function buildBgCache() {
   const off = document.createElement('canvas');
-  off.width = W; off.height = H;
+  off.width = CANVAS_W; off.height = CANVAS_H;
   const oc = off.getContext('2d');
+
+  // ── Fill entire canvas with darkest space colour (visible in iso corners) ──
+  oc.fillStyle = '#090220';
+  oc.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  // ── Apply isometric transform — world space now maps to angled screen space ──
+  oc.setTransform(1, 0.5, -1, 0.5, ISO_OX, ISO_OY);
 
   // ── Deep space base gradient ──
   const skyGrad = oc.createLinearGradient(0, 0, 0, H);
@@ -560,12 +588,72 @@ function buildBgCache() {
     }
   }
 
-  // ── Full-map vignette darkening ──
+  // ── Full-map vignette darkening (still in world/iso transform space) ──
   const vig = oc.createRadialGradient(W/2, H/2, H*0.28, W/2, H/2, H*0.90);
   vig.addColorStop(0, 'rgba(0,0,0,0)');
   vig.addColorStop(1, 'rgba(0,0,25,0.22)');
   oc.fillStyle = vig;
   oc.fillRect(0, 0, W, H);
+
+  // ── Reset to identity transform for drawing depth walls in screen space ──
+  oc.setTransform(1, 0, 0, 1, 0, 0);
+
+  // ── South wall — bottom edge of the map (row = ROWS), visible face ──
+  for (let col = 0; col < COLS; col++) {
+    const isPath = PATH_SET.has(`${col},${ROWS - 1}`);
+    const p1 = toIso(col * TILE,       ROWS * TILE);
+    const p2 = toIso((col + 1) * TILE, ROWS * TILE);
+    // Main face — dark sand or dark alien colour
+    oc.fillStyle = isPath ? '#6b3c10' : '#1e0848';
+    oc.beginPath();
+    oc.moveTo(p1.sx, p1.sy);
+    oc.lineTo(p2.sx, p2.sy);
+    oc.lineTo(p2.sx, p2.sy + WALL_H);
+    oc.lineTo(p1.sx, p1.sy + WALL_H);
+    oc.closePath();
+    oc.fill();
+    // Subtle top-edge highlight to separate face from top surface
+    oc.strokeStyle = isPath ? 'rgba(210,170,80,0.35)' : 'rgba(80,0,180,0.35)';
+    oc.lineWidth = 1;
+    oc.beginPath();
+    oc.moveTo(p1.sx, p1.sy); oc.lineTo(p2.sx, p2.sy);
+    oc.stroke();
+    // Bottom edge shadow
+    oc.strokeStyle = 'rgba(0,0,0,0.5)';
+    oc.lineWidth = 1;
+    oc.beginPath();
+    oc.moveTo(p1.sx, p1.sy + WALL_H); oc.lineTo(p2.sx, p2.sy + WALL_H);
+    oc.stroke();
+  }
+
+  // ── East wall — right edge of the map (col = COLS), visible face ──
+  for (let row = 0; row < ROWS; row++) {
+    const isPath = PATH_SET.has(`${COLS - 1},${row}`);
+    const p1 = toIso(COLS * TILE, row * TILE);
+    const p2 = toIso(COLS * TILE, (row + 1) * TILE);
+    // East face is slightly darker than south face (ambient occlusion)
+    oc.fillStyle = isPath ? '#4e2b08' : '#130530';
+    oc.beginPath();
+    oc.moveTo(p1.sx, p1.sy);
+    oc.lineTo(p2.sx, p2.sy);
+    oc.lineTo(p2.sx, p2.sy + WALL_H);
+    oc.lineTo(p1.sx, p1.sy + WALL_H);
+    oc.closePath();
+    oc.fill();
+    // Top-edge highlight
+    oc.strokeStyle = isPath ? 'rgba(210,160,60,0.25)' : 'rgba(60,0,140,0.25)';
+    oc.lineWidth = 1;
+    oc.beginPath();
+    oc.moveTo(p1.sx, p1.sy); oc.lineTo(p2.sx, p2.sy);
+    oc.stroke();
+  }
+
+  // ── Corner cap — where south and east walls meet ──
+  {
+    const corner = toIso(COLS * TILE, ROWS * TILE);
+    oc.fillStyle = '#0e0320';
+    oc.fillRect(corner.sx - 1, corner.sy, 2, WALL_H + 1);
+  }
 
   oc.globalAlpha = 1;
   return off;
@@ -582,35 +670,54 @@ function drawPathLine() {
   ctx.textBaseline = 'middle';
 
   for (const lane of currentLanes) {
+    // Convert lane waypoints to isometric screen coords
+    const isoPts = lane.px.map(([x, y]) => { const p = toIso(x, y); return [p.sx, p.sy]; });
+
     // Warm worn-center highlight along the sandy walkway
     ctx.strokeStyle = 'rgba(255,215,120,0.38)';
-    ctx.lineWidth   = TILE * 0.42;
+    ctx.lineWidth   = TILE * 0.28;   // slightly narrower in iso view
     ctx.lineCap     = 'round';
     ctx.lineJoin    = 'round';
     ctx.beginPath();
-    lane.px.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    isoPts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
     ctx.stroke();
 
     // Thin bright center spine — shows enemy travel lane
     ctx.strokeStyle = 'rgba(255,245,180,0.55)';
-    ctx.lineWidth   = TILE * 0.18;
+    ctx.lineWidth   = TILE * 0.10;
     ctx.beginPath();
-    lane.px.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    isoPts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
     ctx.stroke();
 
     ctx.lineCap  = 'butt';
     ctx.lineJoin = 'miter';
 
-    // Direction markers — dark amber for contrast on the bright path
+    // Direction markers at iso midpoint positions (drawn upright — no skew)
     ctx.fillStyle = 'rgba(90,50,5,0.72)';
     for (let i = 0; i < lane.raw.length - 1; i++) {
       const [c1,r1] = lane.raw[i], [c2,r2] = lane.raw[i+1];
       const mx = ((c1+c2)/2)*TILE + TILE/2;
       const my = ((r1+r2)/2)*TILE + TILE/2;
+      const {sx, sy} = toIso(mx, my);
       const arrow = c2>c1 ? '→' : c2<c1 ? '←' : r2>r1 ? '↓' : '↑';
-      ctx.fillText(arrow, mx, my);
+      ctx.fillText(arrow, sx, sy);
     }
   }
+}
+
+function drawIsoTileHighlight(col, row, fillStyle) {
+  const tl = toIso(col*TILE,        row*TILE);
+  const tr = toIso((col+1)*TILE,    row*TILE);
+  const br = toIso((col+1)*TILE, (row+1)*TILE);
+  const bl = toIso(col*TILE,     (row+1)*TILE);
+  ctx.fillStyle = fillStyle;
+  ctx.beginPath();
+  ctx.moveTo(tl.sx, tl.sy);
+  ctx.lineTo(tr.sx, tr.sy);
+  ctx.lineTo(br.sx, br.sy);
+  ctx.lineTo(bl.sx, bl.sy);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawStartEnd() {
@@ -621,51 +728,67 @@ function drawStartEnd() {
     const [sc,sr] = lane.raw[0];
     const [ec,er] = lane.raw[lane.raw.length - 1];
 
-    ctx.fillStyle = 'rgba(0,220,80,0.28)';
-    ctx.fillRect(sc*TILE, sr*TILE, TILE, TILE);
+    drawIsoTileHighlight(sc, sr, 'rgba(0,220,80,0.28)');
+    const sC = toIso(sc*TILE+TILE/2, sr*TILE+TILE/2);
     ctx.fillStyle = '#88ffaa';
-    ctx.fillText('IN', sc*TILE+TILE/2, sr*TILE+TILE/2);
+    ctx.fillText('IN', sC.sx, sC.sy);
 
-    ctx.fillStyle = 'rgba(220,40,40,0.28)';
-    ctx.fillRect(ec*TILE, er*TILE, TILE, TILE);
+    drawIsoTileHighlight(ec, er, 'rgba(220,40,40,0.28)');
+    const eC = toIso(ec*TILE+TILE/2, er*TILE+TILE/2);
     ctx.fillStyle = '#ffaaaa';
-    ctx.fillText('BASE', ec*TILE+TILE/2, er*TILE+TILE/2);
+    ctx.fillText('BASE', eC.sx, eC.sy);
   }
 }
 
 function drawHoverHighlight() {
   if (!state.hoveredTile || !state.selectedType) return;
   const {c, r} = state.hoveredTile;
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
   const canPlace = !PATH_SET.has(`${c},${r}`) && !state.towers.find(t => t.c===c && t.r===r);
 
-  ctx.fillStyle = canPlace ? 'rgba(80,200,80,0.25)' : 'rgba(200,60,60,0.25)';
-  ctx.fillRect(c*TILE, r*TILE, TILE, TILE);
+  drawIsoTileHighlight(c, r, canPlace ? 'rgba(80,200,80,0.25)' : 'rgba(200,60,60,0.25)');
 
   if (canPlace) {
     const def = TOWER_DEFS[state.selectedType];
+    // Draw range ring using the iso transform so it appears as a proper ellipse
+    ctx.save();
+    ctx.setTransform(1, 0.5, -1, 0.5, ISO_OX, ISO_OY);
     ctx.strokeStyle = 'rgba(80,200,80,0.4)';
-    ctx.lineWidth   = 1;
+    ctx.lineWidth   = 2;
     ctx.setLineDash([5,4]);
     ctx.beginPath();
     ctx.arc(c*TILE+TILE/2, r*TILE+TILE/2, def.range*TILE, 0, Math.PI*2);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
   }
 }
 
 function drawTower(t) {
   const def  = TOWER_DEFS[t.type];
-  const cx   = t.c*TILE + TILE/2;
-  const cy   = t.r*TILE + TILE/2;
+  const wxc  = t.c*TILE + TILE/2;
+  const wyc  = t.r*TILE + TILE/2;
   const dead = t.ammo <= 0;
 
-  // Platform base
+  // Platform base — drawn as an isometric diamond
+  const pad = 3;
+  const tl = toIso(t.c*TILE + pad,      t.r*TILE + pad);
+  const tr = toIso(t.c*TILE+TILE - pad, t.r*TILE + pad);
+  const br = toIso(t.c*TILE+TILE - pad, t.r*TILE+TILE - pad);
+  const bl = toIso(t.c*TILE + pad,      t.r*TILE+TILE - pad);
   ctx.fillStyle = dead ? '#252a30' : '#1e2b3a';
   ctx.beginPath();
-  ctx.rect(t.c*TILE+3, t.r*TILE+3, TILE-6, TILE-6);
+  ctx.moveTo(tl.sx, tl.sy);
+  ctx.lineTo(tr.sx, tr.sy);
+  ctx.lineTo(br.sx, br.sy);
+  ctx.lineTo(bl.sx, bl.sy);
+  ctx.closePath();
   ctx.fill();
 
-  // Turret mount ring
+  // Iso screen position of the tower centre (gun model drawn upright here)
+  const {sx: cx, sy: cy} = toIso(wxc, wyc);
+
+  // Turret mount ring (upright circle in screen space)
   ctx.fillStyle   = dead ? '#2a3036' : '#1e3a55';
   ctx.strokeStyle = dead ? '#404850' : '#2a5580';
   ctx.lineWidth   = 2.5;
@@ -674,7 +797,7 @@ function drawTower(t) {
   ctx.fill();
   ctx.stroke();
 
-  // Draw the gun model rotated to face the aim angle
+  // Draw the gun model rotated to face the aim angle (upright, not iso-skewed)
   const ang = t.angle || 0;
   ctx.save();
   ctx.translate(cx, cy);
@@ -944,11 +1067,11 @@ function drawTower(t) {
 
   ctx.restore();
 
-  // Ammo bar
-  const pct  = t.ammo / def.ammo;
-  const bx   = t.c*TILE + 5;
-  const by   = t.r*TILE + TILE - 9;
-  const bw   = TILE - 10;
+  // Ammo bar — positioned just below the gun sprite in screen space
+  const pct = t.ammo / def.ammo;
+  const bw  = TILE - 10;
+  const bx  = cx - bw / 2;
+  const by  = cy + 14;
   ctx.fillStyle = '#0d1117';
   ctx.fillRect(bx, by, bw, 5);
   ctx.fillStyle = dead ? '#444' : pct > 0.5 ? '#3fb950' : pct > 0.25 ? '#ffa657' : '#ff6b6b';
@@ -1348,7 +1471,7 @@ function drawTank(rx, ry, s, flash) {
 function drawEnemy(e) {
   const def = ENEMY_DEFS[e.type];
 
-  // Compute render position with perpendicular side offset for parallel travel
+  // Compute render position in world space (with perpendicular side offset)
   let rx = e.x, ry = e.y;
   if (e.sideOffset && e.wpIdx < e.lane.px.length) {
     const [wx, wy] = e.lane.px[e.wpIdx];
@@ -1360,41 +1483,46 @@ function drawEnemy(e) {
     }
   }
 
-  const s = def.size;
-  if (e.type === 'scout')        drawScout(rx, ry, s, e.flash);
-  else if (e.type === 'soldier') drawSoldier(rx, ry, s, e.flash);
-  else                           drawTank(rx, ry, s, e.flash);
+  // Convert world position to isometric screen position for upright sprite drawing
+  const {sx, sy} = toIso(rx, ry);
 
-  // Health bar – positioned above the tallest part of each character
+  const s = def.size;
+  if (e.type === 'scout')        drawScout(sx, sy, s, e.flash);
+  else if (e.type === 'soldier') drawSoldier(sx, sy, s, e.flash);
+  else                           drawTank(sx, sy, s, e.flash);
+
+  // Health bar in screen space above the sprite
   const barW = s * 3.2;
-  const barY = e.type === 'scout'   ? ry - s * 2.08
-             : e.type === 'soldier' ? ry - s * 1.92
-             :                        ry - s * 2.38;
+  const barY = e.type === 'scout'   ? sy - s * 2.08
+             : e.type === 'soldier' ? sy - s * 1.92
+             :                        sy - s * 2.38;
   const pct  = e.hp / e.maxHp;
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(rx - barW/2, barY, barW, 4);
+  ctx.fillRect(sx - barW/2, barY, barW, 4);
   ctx.fillStyle = pct > 0.6 ? '#3fb950' : pct > 0.3 ? '#ffa657' : '#ff4444';
-  ctx.fillRect(rx - barW/2, barY, barW * pct, 4);
+  ctx.fillRect(sx - barW/2, barY, barW * pct, 4);
 }
 
 function drawBullet(b) {
+  const {sx, sy} = toIso(b.x, b.y);
   ctx.fillStyle = b.color;
   ctx.beginPath();
-  ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+  ctx.arc(sx, sy, b.r, 0, Math.PI*2);
   ctx.fill();
   // Glow
   ctx.fillStyle = b.color + '44';
   ctx.beginPath();
-  ctx.arc(b.x, b.y, b.r + 3, 0, Math.PI*2);
+  ctx.arc(sx, sy, b.r + 3, 0, Math.PI*2);
   ctx.fill();
 }
 
 function drawParticles() {
   for (const p of particles) {
+    const {sx, sy} = toIso(p.x, p.y);
     ctx.globalAlpha = p.life / p.maxLife;
     ctx.fillStyle   = p.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.arc(sx, sy, p.r, 0, Math.PI*2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -1586,7 +1714,7 @@ function gameLoop() {
 
   try {
     // ── Draw ──
-    ctx.clearRect(0, 0, W, H);
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     drawGrid();
     drawPathLine();
     drawStartEnd();
@@ -1652,10 +1780,17 @@ function restartGame() {
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 function tileAt(evt) {
-  const rect = canvas.getBoundingClientRect();
+  const rect  = canvas.getBoundingClientRect();
+  // Scale from CSS display size back to canvas pixel size
+  const scaleX = CANVAS_W / rect.width;
+  const scaleY = CANVAS_H / rect.height;
+  const sx = (evt.clientX - rect.left) * scaleX;
+  const sy = (evt.clientY - rect.top)  * scaleY;
+  // Inverse isometric transform → world pixel coords
+  const {wx, wy} = fromIso(sx, sy);
   return {
-    c: Math.floor((evt.clientX - rect.left)  / TILE),
-    r: Math.floor((evt.clientY - rect.top)   / TILE),
+    c: Math.floor(wx / TILE),
+    r: Math.floor(wy / TILE),
   };
 }
 
