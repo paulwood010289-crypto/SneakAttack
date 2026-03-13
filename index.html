@@ -1702,9 +1702,10 @@ function waveComplete() {
     return;
   }
 
-  // Gun credits for the next round — enough to give a fighting chance, not a free win.
-  // Scales from 100 (after wave 1) up to 180 (after wave 5) in steps of 20.
-  const gunCredits = 100 + (state.wave - 1) * 20;
+  // Gun credits for the next round — calibrated so kill income + bonus ≈ the starting 300,
+  // keeping each round properly funded without handing out a free win.
+  // After wave 1: 270 (+ ~60 kills = 330). After wave 5: 350 (+ ~500 kills = 850).
+  const gunCredits = 250 + state.wave * 20;
   state.credits += gunCredits;
 
   // Clear all towers — guns only last one wave; player re-places each round
