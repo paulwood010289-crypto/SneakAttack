@@ -290,9 +290,9 @@ function setRoute(routeConfigIdx) {
 
 // Enemy types
 const ENEMY_DEFS = {
-  scout:   { hp:3,  speed:1.8, color:'#ff6b6b', size:10, reward:10,  dmgOnLeak:1, label:'S' },
-  soldier: { hp:10, speed:1.1, color:'#ff9f43', size:13, reward:25,  dmgOnLeak:2, label:'M' },
-  tank:    { hp:25, speed:0.6, color:'#ee5a24', size:16, reward:60,  dmgOnLeak:3, label:'T' },
+  scout:   { hp:3,  speed:1.8, color:'#ff6b6b', size:20, reward:10,  dmgOnLeak:1, label:'S' },
+  soldier: { hp:10, speed:1.1, color:'#ff9f43', size:26, reward:25,  dmgOnLeak:2, label:'M' },
+  tank:    { hp:25, speed:0.6, color:'#ee5a24', size:32, reward:60,  dmgOnLeak:3, label:'T' },
 };
 
 // 6 progressively harder waves
@@ -793,7 +793,7 @@ function drawTower(t) {
   ctx.strokeStyle = dead ? '#404850' : '#2a5580';
   ctx.lineWidth   = 2.5;
   ctx.beginPath();
-  ctx.arc(cx, cy, 10, 0, Math.PI*2);
+  ctx.arc(cx, cy, 20, 0, Math.PI*2);
   ctx.fill();
   ctx.stroke();
 
@@ -802,6 +802,7 @@ function drawTower(t) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(ang);
+  ctx.scale(2, 2);
 
   if (t.type === 'pistol') {
     // ── PISTOL: compact semi-automatic handgun ──
@@ -1071,7 +1072,7 @@ function drawTower(t) {
   const pct = t.ammo / def.ammo;
   const bw  = TILE - 10;
   const bx  = cx - bw / 2;
-  const by  = cy + 14;
+  const by  = cy + 28;
   ctx.fillStyle = '#0d1117';
   ctx.fillRect(bx, by, bw, 5);
   ctx.fillStyle = dead ? '#444' : pct > 0.5 ? '#3fb950' : pct > 0.25 ? '#ffa657' : '#ff6b6b';
