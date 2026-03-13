@@ -361,9 +361,9 @@ function buildBgCache() {
 
   // ── Deep space base gradient ──
   const skyGrad = oc.createLinearGradient(0, 0, 0, H);
-  skyGrad.addColorStop(0,   '#12023e');
-  skyGrad.addColorStop(0.4, '#080320');
-  skyGrad.addColorStop(1,   '#04021a');
+  skyGrad.addColorStop(0,   '#2e0f6e');
+  skyGrad.addColorStop(0.4, '#1a0850');
+  skyGrad.addColorStop(1,   '#120638');
   oc.fillStyle = skyGrad;
   oc.fillRect(0, 0, W, H);
 
@@ -379,7 +379,7 @@ function buildBgCache() {
     const nr = 70 + seededRand(ns * 11.7) * 130;
     const [nr2, ng2, nb2] = nebColors[i];
     const grad = oc.createRadialGradient(nx, ny, 0, nx, ny, nr);
-    grad.addColorStop(0, `rgba(${nr2},${ng2},${nb2},0.10)`);
+    grad.addColorStop(0, `rgba(${nr2},${ng2},${nb2},0.22)`);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     oc.fillStyle = grad;
     oc.fillRect(0, 0, W, H);
@@ -415,16 +415,16 @@ function buildBgCache() {
 
         // Tinted ground variation
         const cv = seededRand(s1);
-        oc.fillStyle = cv > 0.75 ? 'rgba(40,0,65,0.50)'  :
-                       cv > 0.50 ? 'rgba(0,40,65,0.40)'  :
-                       cv > 0.25 ? 'rgba(18,0,52,0.42)'  :
-                                   'rgba(8,28,48,0.35)';
+        oc.fillStyle = cv > 0.75 ? 'rgba(80,10,120,0.65)' :
+                       cv > 0.50 ? 'rgba(10,70,110,0.55)' :
+                       cv > 0.25 ? 'rgba(50,10,100,0.58)' :
+                                   'rgba(20,55,90,0.50)';
         oc.fillRect(x, y, TILE, TILE);
 
         // Cracked ground veins
         if (seededRand(s2 + 200) > 0.60) {
           oc.save();
-          oc.strokeStyle = 'rgba(110,20,180,0.20)';
+          oc.strokeStyle = 'rgba(150,40,230,0.38)';
           oc.lineWidth = 0.6;
           oc.beginPath();
           const cx0 = x + seededRand(s1+30) * TILE;
@@ -484,7 +484,7 @@ function buildBgCache() {
         }
 
         // Glowing alien grid border
-        oc.strokeStyle = 'rgba(0,170,140,0.11)';
+        oc.strokeStyle = 'rgba(0,210,175,0.22)';
         oc.lineWidth   = 0.5;
         oc.strokeRect(x+0.5, y+0.5, TILE-1, TILE-1);
 
@@ -492,9 +492,9 @@ function buildBgCache() {
         // ═══ SANDY PATH ═══
 
         // Base sand color with per-tile variation
-        const sr2 = Math.floor(172 + seededRand(s1)     * 32);
-        const sg2 = Math.floor(135 + seededRand(s2)     * 24);
-        const sb2 = Math.floor(58  + seededRand(s3)     * 20);
+        const sr2 = Math.floor(210 + seededRand(s1)     * 35);
+        const sg2 = Math.floor(175 + seededRand(s2)     * 28);
+        const sb2 = Math.floor(100 + seededRand(s3)     * 28);
         oc.fillStyle = `rgb(${sr2},${sg2},${sb2})`;
         oc.fillRect(x, y, TILE, TILE);
 
@@ -506,7 +506,7 @@ function buildBgCache() {
           const lit = seededRand(s3 + g*11.7) > 0.5;
           const ga  = 0.10 + seededRand(s1 + g*13.3) * 0.24;
           const gs  = 0.5  + seededRand(s2 + g*17.9) * 1.4;
-          oc.fillStyle = lit ? `rgba(230,200,130,${ga})` : `rgba(105,68,22,${ga})`;
+          oc.fillStyle = lit ? `rgba(255,235,170,${ga})` : `rgba(140,95,40,${ga})`;
           oc.beginPath(); oc.arc(gx, gy, gs, 0, Math.PI*2); oc.fill();
         }
 
@@ -563,7 +563,7 @@ function buildBgCache() {
   // ── Full-map vignette darkening ──
   const vig = oc.createRadialGradient(W/2, H/2, H*0.28, W/2, H/2, H*0.90);
   vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(1, 'rgba(0,0,25,0.50)');
+  vig.addColorStop(1, 'rgba(0,0,25,0.22)');
   oc.fillStyle = vig;
   oc.fillRect(0, 0, W, H);
 
@@ -583,7 +583,7 @@ function drawPathLine() {
 
   for (const lane of currentLanes) {
     // Warm worn-center highlight along the sandy walkway
-    ctx.strokeStyle = 'rgba(215,178,98,0.16)';
+    ctx.strokeStyle = 'rgba(255,215,120,0.38)';
     ctx.lineWidth   = TILE * 0.42;
     ctx.lineCap     = 'round';
     ctx.lineJoin    = 'round';
@@ -592,7 +592,7 @@ function drawPathLine() {
     ctx.stroke();
 
     // Thin bright center spine — shows enemy travel lane
-    ctx.strokeStyle = 'rgba(235,195,115,0.12)';
+    ctx.strokeStyle = 'rgba(255,245,180,0.55)';
     ctx.lineWidth   = TILE * 0.18;
     ctx.beginPath();
     lane.px.forEach(([x,y], i) => i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
@@ -601,8 +601,8 @@ function drawPathLine() {
     ctx.lineCap  = 'butt';
     ctx.lineJoin = 'miter';
 
-    // Direction markers — earthy amber tone blending into the sand
-    ctx.fillStyle = 'rgba(150,98,28,0.48)';
+    // Direction markers — dark amber for contrast on the bright path
+    ctx.fillStyle = 'rgba(90,50,5,0.72)';
     for (let i = 0; i < lane.raw.length - 1; i++) {
       const [c1,r1] = lane.raw[i], [c2,r2] = lane.raw[i+1];
       const mx = ((c1+c2)/2)*TILE + TILE/2;
