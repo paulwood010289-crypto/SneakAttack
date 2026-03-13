@@ -218,24 +218,42 @@ const TOWER_DEFS = {
 };
 
 // ─── Multi-route configuration ─────────────────────────────────────────────────
-// Each route has multiple lanes (sub-paths). Routes change every 2 waves.
+// Each route has multiple lanes (sub-paths). Routes change every wave.
 // Each lane = array of [col, row] waypoints.
 const ROUTE_CONFIGS = [
-  // Route 0 (Waves 1-2): Two parallel S-curves (no crossing)
+  // Route 0 (Wave 1): Two parallel S-curves — a gentle introduction
   [
     [[0,4],[5,4],[5,2],[12,2],[12,6],[17,6],[17,4],[19,4]],
     [[0,9],[5,9],[5,11],[12,11],[12,7],[17,7],[17,9],[19,9]],
   ],
-  // Route 1 (Waves 3-4): Two crossing paths, different start & end points
+  // Route 1 (Wave 2): Two crossing X-paths — enemies weave through each other
   [
     [[0,3],[8,3],[8,10],[19,10]],
     [[0,10],[11,10],[11,3],[19,3]],
   ],
-  // Route 2 (Waves 5-6): Three lanes with multiple intersections
+  // Route 2 (Wave 3): Three lanes with multiple intersections — coverage gets tricky
   [
     [[0,2],[5,2],[5,11],[14,11],[14,5],[19,5]],
     [[0,7],[10,7],[10,1],[19,1]],
     [[0,11],[7,11],[7,4],[19,4]],
+  ],
+  // Route 3 (Wave 4): The Squeeze — two lanes that funnel tightly through the centre then split
+  [
+    [[0,2],[6,2],[6,6],[13,6],[13,2],[19,2]],
+    [[0,11],[6,11],[6,7],[13,7],[13,11],[19,11]],
+  ],
+  // Route 4 (Wave 5): The Blitz — three straight lanes demanding full-map coverage
+  [
+    [[0,2],[19,2]],
+    [[0,7],[19,7]],
+    [[0,12],[19,12]],
+  ],
+  // Route 5 (Wave 6): The Vortex — four criss-crossing lanes that spiral the map
+  [
+    [[0,1],[8,1],[8,13],[19,13]],
+    [[0,5],[11,5],[11,9],[19,9]],
+    [[0,9],[11,9],[11,5],[19,5]],
+    [[0,13],[8,13],[8,1],[19,1]],
   ],
 ];
 
@@ -1683,20 +1701,26 @@ function waveComplete() {
     showOverlay('🏆 Victory!', `All ${state.maxWave} waves survived!\n${state.kills} enemies eliminated · ${state.leaked} broke through.`);
     return;
   }
-  const bonus = 50 + state.wave * 20;
-  state.credits += bonus;
 
-  // Clear all towers — guns only last one wave; player re-places next wave
+  // Gun credits for the next round — enough to give a fighting chance, not a free win.
+  // Scales from 100 (after wave 1) up to 180 (after wave 5) in steps of 20.
+  const gunCredits = 100 + (state.wave - 1) * 20;
+  state.credits += gunCredits;
+
+  // Clear all towers — guns only last one wave; player re-places each round
   state.towers = [];
 
-  // Change route after every second wave
-  if (state.wave % 2 === 0) {
-    const newRouteIdx = Math.floor(state.wave / 2);
-    setRoute(newRouteIdx);
-    setMsg(`Wave ${state.wave} cleared! +${bonus} credits. ⚠ Enemy route changed! Place new guns.`, 'warn');
-  } else {
-    setMsg(`Wave ${state.wave} cleared! Bonus +${bonus} credits. Place your guns for the next wave.`, 'good');
-  }
+  // Rotate the map every round — each wave brings a brand-new battlefield layout
+  const routeNames = [
+    'S-Curves', 'Crossfire', 'Triple Maze', 'The Squeeze', 'The Blitz', 'The Vortex',
+  ];
+  const newRouteIdx = state.wave;
+  setRoute(newRouteIdx);
+  const routeName = routeNames[newRouteIdx % routeNames.length] || `Layout ${newRouteIdx + 1}`;
+  setMsg(
+    `Wave ${state.wave} cleared! +${gunCredits} gun credits awarded. ⚠ New battlefield: ${routeName} — redeploy your weapons!`,
+    'warn'
+  );
   updateUI();
 }
 
