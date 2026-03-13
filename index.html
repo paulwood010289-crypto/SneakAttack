@@ -659,34 +659,290 @@ function drawTower(t) {
   const cy   = t.r*TILE + TILE/2;
   const dead = t.ammo <= 0;
 
-  // Platform
+  // Platform base
   ctx.fillStyle = dead ? '#252a30' : '#1e2b3a';
   ctx.beginPath();
   ctx.rect(t.c*TILE+3, t.r*TILE+3, TILE-6, TILE-6);
   ctx.fill();
 
-  // Body circle
-  ctx.fillStyle   = dead ? '#555' : def.color + 'cc';
-  ctx.strokeStyle = dead ? '#666' : def.color;
-  ctx.lineWidth   = 2;
+  // Turret mount ring
+  ctx.fillStyle   = dead ? '#2a3036' : '#1e3a55';
+  ctx.strokeStyle = dead ? '#404850' : '#2a5580';
+  ctx.lineWidth   = 2.5;
   ctx.beginPath();
-  ctx.arc(cx, cy, def.bRadius + 8, 0, Math.PI*2);
+  ctx.arc(cx, cy, 10, 0, Math.PI*2);
   ctx.fill();
   ctx.stroke();
 
-  // Gun barrel
-  if (!dead) {
-    const ang = t.angle || 0;
-    const br  = def.bRadius + 8;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth   = t.type === 'cannon' ? 4 : 3;
-    ctx.lineCap     = 'round';
+  // Draw the gun model rotated to face the aim angle
+  const ang = t.angle || 0;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(ang);
+
+  if (t.type === 'pistol') {
+    // ── PISTOL: compact semi-automatic handgun ──
+    const cMain  = dead ? '#505860' : '#4a9eff';
+    const cDark  = dead ? '#383e46' : '#1858c0';
+    const cHigh  = dead ? '#606870' : '#88c8ff';
+    const cMetal = dead ? '#404850' : '#2266cc';
+
+    // Grip (below/behind the slide)
+    ctx.fillStyle = cDark;
     ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(ang)*3, cy + Math.sin(ang)*3);
-    ctx.lineTo(cx + Math.cos(ang)*(br+9), cy + Math.sin(ang)*(br+9));
+    ctx.roundRect(-7, 2, 8, 12, [0, 0, 3, 2]);
+    ctx.fill();
+    // Grip checkering
+    ctx.strokeStyle = dead ? '#303840' : '#0f3890';
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-6, 5 + i * 2.5);
+      ctx.lineTo(-0.5, 5 + i * 2.5);
+      ctx.stroke();
+    }
+
+    // Trigger guard
+    ctx.strokeStyle = cMain;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 3, 5, 0.1, Math.PI * 0.88);
+    ctx.stroke();
+    // Trigger
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(-0.5, 2, 2, 4);
+
+    // Slide body
+    ctx.fillStyle = cMetal;
+    ctx.beginPath();
+    ctx.roundRect(-4, -5, 22, 9, 2);
+    ctx.fill();
+    // Slide top highlight
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(-3, -5, 18, 2);
+    // Ejection port cutout
+    ctx.fillStyle = dead ? '#282e36' : '#0a1e40';
+    ctx.fillRect(4, -4, 9, 3);
+    // Slide serrations (rear)
+    ctx.strokeStyle = dead ? '#303840' : '#1040a0';
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-3 + i * 1.6, -5);
+      ctx.lineTo(-3 + i * 1.6, 4);
+      ctx.stroke();
+    }
+
+    // Barrel extension beyond slide
+    ctx.fillStyle = cMain;
+    ctx.fillRect(18, -2.5, 8, 5);
+    // Muzzle face
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(24, -2.5, 2, 5);
+    // Bore
+    ctx.fillStyle = dead ? '#282e36' : '#061226';
+    ctx.beginPath();
+    ctx.arc(25.5, 0, 1.8, 0, Math.PI*2);
+    ctx.fill();
+
+    // Rear sights (two white posts)
+    ctx.fillStyle = '#e0e8ff';
+    ctx.fillRect(-2, -7, 2, 2);
+    ctx.fillRect(2.5, -7, 2, 2);
+    // Front sight
+    ctx.fillStyle = '#e0e8ff';
+    ctx.fillRect(13, -7, 2, 2);
+
+  } else if (t.type === 'rifle') {
+    // ── RIFLE: precision bolt-action sniper rifle ──
+    const cMain  = dead ? '#505860' : '#4aff7a';
+    const cDark  = dead ? '#383e46' : '#188844';
+    const cHigh  = dead ? '#606870' : '#a0ffb8';
+    const cMetal = dead ? '#404850' : '#228855';
+
+    // Buttstock
+    ctx.fillStyle = cDark;
+    ctx.beginPath();
+    ctx.roundRect(-18, -3, 14, 10, [1, 0, 3, 2]);
+    ctx.fill();
+    // Cheek rest (raised top of stock)
+    ctx.fillStyle = dead ? '#303840' : '#116633';
+    ctx.beginPath();
+    ctx.roundRect(-17, -5, 10, 4, 1);
+    ctx.fill();
+
+    // Receiver body
+    ctx.fillStyle = cMetal;
+    ctx.beginPath();
+    ctx.roundRect(-4, -5, 22, 10, 2);
+    ctx.fill();
+    // Receiver top highlight
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(-3, -5, 19, 2);
+
+    // Barrel (long, with fluting)
+    ctx.fillStyle = cMetal;
+    ctx.fillRect(18, -2.5, 8, 5);
+    // Fluting grooves
+    ctx.fillStyle = dead ? '#303840' : '#116633';
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(19 + i * 2.8, -2.5, 1.2, 5);
+    }
+
+    // Muzzle brake
+    ctx.fillStyle = cMain;
+    ctx.beginPath();
+    ctx.roundRect(25, -4, 5, 8, 1);
+    ctx.fill();
+    // Muzzle brake ports
+    ctx.fillStyle = dead ? '#282e36' : '#0a2a10';
+    ctx.fillRect(26.5, -4, 1.2, 3);
+    ctx.fillRect(26.5, 1, 1.2, 3);
+    // Bore
+    ctx.fillStyle = dead ? '#282e36' : '#061a0a';
+    ctx.beginPath();
+    ctx.arc(29.5, 0, 1.8, 0, Math.PI*2);
+    ctx.fill();
+
+    // Scope body
+    ctx.fillStyle = '#18181f';
+    ctx.beginPath();
+    ctx.roundRect(-1, -10, 18, 6, 2.5);
+    ctx.fill();
+    ctx.fillStyle = '#252530';
+    ctx.fillRect(-0.5, -10, 17, 2);
+    // Scope turret knob
+    ctx.fillStyle = '#303040';
+    ctx.fillRect(7, -13, 3, 4);
+    // Scope front lens
+    ctx.fillStyle = dead ? '#252535' : '#1a3a88';
+    ctx.beginPath();
+    ctx.arc(16, -7, 3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = dead ? '#3a4050' : '#5080ee';
+    ctx.beginPath();
+    ctx.arc(15.5, -7.5, 1.5, 0, Math.PI*2);
+    ctx.fill();
+    // Scope rear lens
+    ctx.fillStyle = dead ? '#252535' : '#1a3a88';
+    ctx.beginPath();
+    ctx.arc(0, -7, 2.5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = dead ? '#3a4050' : '#5080ee';
+    ctx.beginPath();
+    ctx.arc(-0.3, -7.3, 1.2, 0, Math.PI*2);
+    ctx.fill();
+
+    // Bolt handle (extending up-right from receiver)
+    ctx.strokeStyle = cHigh;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(12, -5);
+    ctx.lineTo(14, -10);
     ctx.stroke();
     ctx.lineCap = 'butt';
+    ctx.fillStyle = cHigh;
+    ctx.beginPath();
+    ctx.arc(14, -11, 2, 0, Math.PI*2);
+    ctx.fill();
+
+    // Magazine
+    ctx.fillStyle = cDark;
+    ctx.beginPath();
+    ctx.roundRect(1, 5, 7, 11, [0, 0, 2, 2]);
+    ctx.fill();
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(2, 15, 5, 1.5);
+
+    // Trigger guard
+    ctx.strokeStyle = cMain;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(5, 5, 5, 0.1, Math.PI * 0.88);
+    ctx.stroke();
+    // Trigger
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(4, 4, 2, 4);
+
+    // Front sight post
+    ctx.fillStyle = '#e0ffe8';
+    ctx.fillRect(21, -6, 2, 2);
+
+  } else if (t.type === 'cannon') {
+    // ── CANNON: heavy field artillery ──
+    const cMain = dead ? '#505860' : '#ffaa44';
+    const cDark = dead ? '#383e46' : '#aa6611';
+    const cHigh = dead ? '#606870' : '#ffd488';
+
+    // Cascabel (heavy knob at breech end)
+    ctx.fillStyle = cMain;
+    ctx.beginPath();
+    ctx.arc(-13, 0, 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = cHigh;
+    ctx.beginPath();
+    ctx.arc(-14, -1.5, 2, 0, Math.PI*2);
+    ctx.fill();
+
+    // Main barrel body (slightly tapered — wider at breech)
+    ctx.fillStyle = cDark;
+    ctx.beginPath();
+    ctx.moveTo(-9, -7);
+    ctx.lineTo(19, -6);
+    ctx.lineTo(19, 6);
+    ctx.lineTo(-9, 7);
+    ctx.closePath();
+    ctx.fill();
+
+    // Barrel top sheen
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(-7, -7, 24, 2.5);
+
+    // Reinforcement bands (rings cast into the barrel)
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(-5, -7, 3.5, 14);
+    ctx.fillRect(2,  -7, 3.5, 14);
+    ctx.fillRect(9,  -7, 3.5, 14);
+    ctx.fillRect(16, -7, 3.5, 14);
+
+    // Muzzle swell (flared end)
+    ctx.fillStyle = cMain;
+    ctx.beginPath();
+    ctx.roundRect(17, -8.5, 9, 17, 2);
+    ctx.fill();
+    // Muzzle top sheen
+    ctx.fillStyle = cHigh;
+    ctx.fillRect(17, -8.5, 9, 2.5);
+    // Bore (dark hole)
+    ctx.fillStyle = '#0a0806';
+    ctx.beginPath();
+    ctx.arc(25, 0, 4.5, 0, Math.PI*2);
+    ctx.fill();
+    // Bore highlight (rim glint)
+    ctx.strokeStyle = dead ? '#404040' : '#cc8822';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(25, 0, 4.5, Math.PI * 1.1, Math.PI * 1.7);
+    ctx.stroke();
+
+    // Vent/touchhole at top of barrel
+    ctx.fillStyle = '#1a0a00';
+    ctx.beginPath();
+    ctx.arc(-3, -7, 1.8, 0, Math.PI*2);
+    ctx.fill();
+
+    // Trunnion supports (side nubs where barrel rests in carriage)
+    ctx.fillStyle = cDark;
+    ctx.beginPath();
+    ctx.ellipse(4, 9, 4, 3, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(4, -9, 4, 3, 0, 0, Math.PI*2);
+    ctx.fill();
   }
+
+  ctx.restore();
 
   // Ammo bar
   const pct  = t.ammo / def.ammo;
