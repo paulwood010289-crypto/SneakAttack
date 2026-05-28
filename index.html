@@ -282,24 +282,25 @@ const W = COLS * TILE;   // 960
 const H = ROWS * TILE;   // 672
 
 // ─── Isometric projection ─────────────────────────────────────────────────────
-// Classic 2:1 dimetric projection: world (wx,wy) → screen (sx,sy)
+// Steeper 3:5 projection (ISO_Y=0.62) for a deeper, more dramatic board
 //   sx = wx - wy + ISO_OX
-//   sy = (wx + wy) * 0.5 + ISO_OY
-const ISO_OX   = H;       // horizontal origin offset (= 672) so left edge starts at x=0
-const ISO_OY   = 12;      // small top margin
-const WALL_H   = 20;      // visible depth wall height in screen pixels
-const CANVAS_W = W + H;   // 1632 — wider to accommodate the angled view
-const CANVAS_H = Math.ceil((W + H) / 2) + WALL_H + ISO_OY; // ≈844
+//   sy = (wx + wy) * ISO_Y + ISO_OY
+const ISO_Y    = 0.62;   // vertical compression — 0.5 = classic 2:1, higher = steeper/deeper
+const ISO_OX   = H;       // horizontal origin offset so left edge starts at x=0
+const ISO_OY   = 16;
+const WALL_H   = 44;      // taller depth walls for the steeper view
+const CANVAS_W = W + H;   // 1632
+const CANVAS_H = Math.ceil((W + H) * ISO_Y) + WALL_H + ISO_OY;
 
 function toIso(wx, wy) {
-  return { sx: wx - wy + ISO_OX, sy: (wx + wy) * 0.5 + ISO_OY };
+  return { sx: wx - wy + ISO_OX, sy: (wx + wy) * ISO_Y + ISO_OY };
 }
 
 // Inverse: screen pixel (sx,sy) → world pixel (wx,wy)
 function fromIso(sx, sy) {
   const rx = sx - ISO_OX;
   const ry = sy - ISO_OY;
-  return { wx: (rx + 2 * ry) / 2, wy: (2 * ry - rx) / 2 };
+  return { wx: (rx + ry / ISO_Y) / 2, wy: (ry / ISO_Y - rx) / 2 };
 }
 
 const TOWER_DEFS = {
@@ -514,60 +515,148 @@ function seededRand(n) {
   return x - Math.floor(x);
 }
 
-// Build an offscreen canvas with rich alien terrain + sandy path textures
 function buildBgCache() {
   const off = document.createElement('canvas');
   off.width = CANVAS_W; off.height = CANVAS_H;
   const oc = off.getContext('2d');
 
-  // ── Fill entire canvas with darkest space colour (visible in iso corners) ──
-  oc.fillStyle = '#090220';
+  // ════════════════════════════════════════════════════════════════════
+  // PHASE 1 — Full-canvas space scene in screen space (fills the void
+  //           that shows in the iso diamond corners)
+  // ════════════════════════════════════════════════════════════════════
+
+  // Deep space radial gradient
+  const spaceBg = oc.createRadialGradient(
+    CANVAS_W * 0.42, CANVAS_H * 0.28, 0,
+    CANVAS_W * 0.5,  CANVAS_H * 0.5,  CANVAS_W * 0.82
+  );
+  spaceBg.addColorStop(0,   '#1c0a42');
+  spaceBg.addColorStop(0.25,'#110628');
+  spaceBg.addColorStop(0.6, '#08021a');
+  spaceBg.addColorStop(1,   '#020108');
+  oc.fillStyle = spaceBg;
   oc.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // ── Apply isometric transform — world space now maps to angled screen space ──
-  oc.setTransform(1, 0.5, -1, 0.5, ISO_OX, ISO_OY);
-
-  // ── Deep space base gradient ──
-  const skyGrad = oc.createLinearGradient(0, 0, 0, H);
-  skyGrad.addColorStop(0,   '#2e0f6e');
-  skyGrad.addColorStop(0.4, '#1a0850');
-  skyGrad.addColorStop(1,   '#120638');
-  oc.fillStyle = skyGrad;
-  oc.fillRect(0, 0, W, H);
-
-  // ── Nebula haze patches ──
-  const nebSeeds  = [11, 23, 37, 53, 71, 89, 101, 113, 127, 149];
-  const nebColors = [
-    [90,0,150],[0,90,160],[130,0,90],[0,150,120],
-    [110,20,170],[20,110,170],[70,0,110],[40,130,110],[80,0,60],[0,60,130]
+  // Nebula clouds — large, atmospheric, covering whole screen
+  const nebulaDefs = [
+    { cx:0.12, cy:0.18, rx:0.36, ry:0.30, col:[110,30,220], a:0.26 },
+    { cx:0.88, cy:0.12, rx:0.30, ry:0.24, col:[0,140,220],  a:0.22 },
+    { cx:0.50, cy:0.90, rx:0.38, ry:0.28, col:[200,30,120], a:0.20 },
+    { cx:0.78, cy:0.65, rx:0.28, ry:0.22, col:[30,180,160], a:0.18 },
+    { cx:0.18, cy:0.78, rx:0.32, ry:0.26, col:[90,20,180],  a:0.22 },
+    { cx:0.55, cy:0.35, rx:0.20, ry:0.18, col:[60,80,200],  a:0.16 },
   ];
-  nebSeeds.forEach((ns, i) => {
-    const nx = seededRand(ns * 3.1) * W;
-    const ny = seededRand(ns * 7.3) * H;
-    const nr = 70 + seededRand(ns * 11.7) * 130;
-    const [nr2, ng2, nb2] = nebColors[i];
-    const grad = oc.createRadialGradient(nx, ny, 0, nx, ny, nr);
-    grad.addColorStop(0, `rgba(${nr2},${ng2},${nb2},0.22)`);
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    oc.fillStyle = grad;
-    oc.fillRect(0, 0, W, H);
-  });
+  for (const nb of nebulaDefs) {
+    oc.save();
+    oc.scale(1, nb.ry / nb.rx);  // squash into oval
+    const cx = nb.cx * CANVAS_W, cy = (nb.cy / (nb.ry / nb.rx)) * CANVAS_H;
+    const r  = nb.rx * Math.min(CANVAS_W, CANVAS_H);
+    const g  = oc.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0,   `rgba(${nb.col},${nb.a})`);
+    g.addColorStop(0.45,`rgba(${nb.col},${(nb.a * 0.5).toFixed(2)})`);
+    g.addColorStop(1,   'rgba(0,0,0,0)');
+    oc.fillStyle = g;
+    oc.fillRect(0, 0, CANVAS_W, CANVAS_H / (nb.ry / nb.rx));
+    oc.restore();
+  }
 
-  // ── Distant stars (only on non-path tiles) ──
-  for (let i = 0; i < 320; i++) {
-    const sx = seededRand(i * 3.1 + 1000) * W;
-    const sy = seededRand(i * 7.3 + 2000) * H;
-    if (!PATH_SET.has(`${Math.floor(sx/TILE)},${Math.floor(sy/TILE)}`)) {
-      const b  = seededRand(i * 11.7 + 3000);
-      const sz = b > 0.93 ? 1.9 : b > 0.77 ? 1.3 : 0.7;
-      const al = 0.2 + b * 0.7;
-      const cv = seededRand(i * 29.3 + 500);
-      oc.fillStyle = cv > 0.7  ? `rgba(160,235,255,${al})` :
-                     cv > 0.42 ? `rgba(205,175,255,${al})` :
-                                 `rgba(255,255,255,${al})`;
-      oc.beginPath(); oc.arc(sx, sy, sz, 0, Math.PI*2); oc.fill();
+  // Dense starfield — 700 stars across the whole canvas with colour variety
+  for (let i = 0; i < 700; i++) {
+    const sx  = seededRand(i * 3.1  + 1000) * CANVAS_W;
+    const sy  = seededRand(i * 7.3  + 2000) * CANVAS_H;
+    const b   = seededRand(i * 11.7 + 3000);
+    const sz  = b > 0.97 ? 2.8 : b > 0.90 ? 1.9 : b > 0.75 ? 1.1 : 0.55;
+    const al  = 0.25 + b * 0.75;
+    const cv  = seededRand(i * 29.3 + 500);
+    const col = cv > 0.72 ? `rgba(185,245,255,${al})`  // blue-white
+              : cv > 0.44 ? `rgba(225,185,255,${al})`  // lavender
+              : cv > 0.18 ? `rgba(255,255,255,${al})`  // white
+              :             `rgba(255,230,170,${al})`;  // warm yellow
+    oc.fillStyle = col;
+    oc.beginPath(); oc.arc(sx, sy, sz, 0, Math.PI * 2); oc.fill();
+    // 4-pointed diffraction spike on the very brightest stars
+    if (sz > 2.2) {
+      const arm = sz * 6;
+      oc.strokeStyle = col.replace(/,[0-9.]+\)$/, `,${(al * 0.35).toFixed(2)})`);
+      oc.lineWidth = 0.7;
+      oc.beginPath();
+      oc.moveTo(sx - arm, sy); oc.lineTo(sx + arm, sy);
+      oc.moveTo(sx, sy - arm); oc.lineTo(sx, sy + arm);
+      oc.stroke();
     }
   }
+
+  // Distant planet — top-right void corner
+  {
+    const px = CANVAS_W * 0.84, py = CANVAS_H * 0.10, pr = 62;
+    // limb-darkened disk
+    const pGrad = oc.createRadialGradient(px - pr*0.32, py - pr*0.38, pr*0.08, px, py, pr);
+    pGrad.addColorStop(0,   'rgba(195,130,255,0.90)');
+    pGrad.addColorStop(0.45,'rgba(110,60,210,0.78)');
+    pGrad.addColorStop(0.85,'rgba(50,20,120,0.55)');
+    pGrad.addColorStop(1,   'rgba(20,5,60,0)');
+    oc.fillStyle = pGrad;
+    oc.beginPath(); oc.arc(px, py, pr, 0, Math.PI * 2); oc.fill();
+    // cloud bands
+    for (let b = 0; b < 4; b++) {
+      const by = py - pr * 0.55 + b * pr * 0.38;
+      const bw = pr * (0.9 - Math.abs(by - py) / pr * 0.4);
+      oc.fillStyle = `rgba(150,90,255,${0.10 - b * 0.018})`;
+      oc.beginPath(); oc.ellipse(px, by, bw, pr * 0.065, 0, 0, Math.PI * 2); oc.fill();
+    }
+    // atmospheric halo
+    const halo = oc.createRadialGradient(px, py, pr * 0.88, px, py, pr * 1.22);
+    halo.addColorStop(0, 'rgba(160,110,255,0.22)');
+    halo.addColorStop(1, 'rgba(100,60,200,0)');
+    oc.fillStyle = halo;
+    oc.beginPath(); oc.arc(px, py, pr * 1.22, 0, Math.PI * 2); oc.fill();
+  }
+
+  // Moon — left void corner
+  {
+    const mx = CANVAS_W * 0.07, my = CANVAS_H * 0.20, mr = 34;
+    const mGrad = oc.createRadialGradient(mx - mr*0.3, my - mr*0.32, mr*0.06, mx, my, mr);
+    mGrad.addColorStop(0,   'rgba(220,240,255,0.82)');
+    mGrad.addColorStop(0.55,'rgba(140,175,230,0.55)');
+    mGrad.addColorStop(1,   'rgba(70,100,180,0)');
+    oc.fillStyle = mGrad;
+    oc.beginPath(); oc.arc(mx, my, mr, 0, Math.PI * 2); oc.fill();
+    // craters
+    for (let c = 0; c < 5; c++) {
+      const cr = seededRand(c * 41.7 + 900);
+      const cx = mx + (seededRand(c * 53.1) - 0.5) * mr * 1.1;
+      const cy = my + (seededRand(c * 67.3) - 0.5) * mr * 1.1;
+      const crad = 2.5 + seededRand(c * 89.9) * 5;
+      oc.strokeStyle = `rgba(100,130,200,${0.22 + cr * 0.12})`;
+      oc.lineWidth = 0.8;
+      oc.beginPath(); oc.arc(cx, cy, crad, 0, Math.PI * 2); oc.stroke();
+    }
+  }
+
+  // Shooting star / comet streak (bottom-left)
+  {
+    oc.save();
+    const grad = oc.createLinearGradient(CANVAS_W*0.05, CANVAS_H*0.85, CANVAS_W*0.22, CANVAS_H*0.72);
+    grad.addColorStop(0, 'rgba(200,240,255,0)');
+    grad.addColorStop(0.7,'rgba(200,240,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.85)');
+    oc.strokeStyle = grad;
+    oc.lineWidth = 1.5;
+    oc.beginPath();
+    oc.moveTo(CANVAS_W*0.05, CANVAS_H*0.85);
+    oc.lineTo(CANVAS_W*0.22, CANVAS_H*0.72);
+    oc.stroke();
+    oc.restore();
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // PHASE 2 — ISO-transformed terrain tiles
+  // ════════════════════════════════════════════════════════════════════
+  oc.setTransform(1, ISO_Y, -1, ISO_Y, ISO_OX, ISO_OY);
+
+  // Dark base flood fill under the entire map diamond
+  oc.fillStyle = '#04020e';
+  oc.fillRect(0, 0, W, H);
 
   // ── Per-tile textures ──
   for (let row = 0; row < ROWS; row++) {
@@ -579,220 +668,215 @@ function buildBgCache() {
       const s3 = col * 31.7  + row * 257.1 + 500;
 
       if (!onPath) {
-        // ═══ ALIEN TERRAIN ═══
+        // ═══ TECH-ALIEN TERRAIN ═══
 
-        // Tinted ground variation
+        // Base colour — deep purple/teal variation per tile
         const cv = seededRand(s1);
-        oc.fillStyle = cv > 0.75 ? 'rgba(80,10,120,0.65)' :
-                       cv > 0.50 ? 'rgba(10,70,110,0.55)' :
-                       cv > 0.25 ? 'rgba(50,10,100,0.58)' :
-                                   'rgba(20,55,90,0.50)';
+        const [br, bg, bb] = cv > 0.75 ? [22,6,42]
+                           : cv > 0.50 ? [6,18,38]
+                           : cv > 0.25 ? [16,4,36]
+                           :             [8,20,32];
+        oc.fillStyle = `rgb(${br},${bg},${bb})`;
         oc.fillRect(x, y, TILE, TILE);
 
-        // Cracked ground veins
-        if (seededRand(s2 + 200) > 0.60) {
-          oc.save();
-          oc.strokeStyle = 'rgba(150,40,230,0.38)';
-          oc.lineWidth = 0.6;
+        // Mid-tone overlay tint
+        oc.fillStyle = cv > 0.75 ? 'rgba(80,12,130,0.55)'
+                     : cv > 0.50 ? 'rgba(8,60,110,0.50)'
+                     : cv > 0.25 ? 'rgba(55,8,105,0.52)'
+                     :             'rgba(14,52,90,0.48)';
+        oc.fillRect(x, y, TILE, TILE);
+
+        // Hex cell inscribed in tile centre
+        if (seededRand(s2 + 100) > 0.25) {
+          const hcx = x + TILE/2, hcy = y + TILE/2, hr = TILE * 0.34;
+          const hexA = cv > 0.5 ? 'rgba(100,30,220,0.28)' : 'rgba(0,160,200,0.22)';
+          oc.strokeStyle = hexA;
+          oc.lineWidth = 0.7;
           oc.beginPath();
-          const cx0 = x + seededRand(s1+30) * TILE;
-          const cy0 = y + seededRand(s2+30) * TILE;
-          const cx1 = x + seededRand(s1+40) * TILE;
-          const cy1 = y + seededRand(s2+40) * TILE;
-          const cx2 = x + seededRand(s1+50) * TILE;
-          const cy2 = y + seededRand(s2+50) * TILE;
-          oc.moveTo(cx0, cy0); oc.lineTo(cx1, cy1);
-          if (seededRand(s3+200) > 0.5) oc.lineTo(cx2, cy2);
-          oc.stroke();
-          oc.restore();
+          for (let v = 0; v < 6; v++) {
+            const a = Math.PI/3 * v - Math.PI/6;
+            v === 0 ? oc.moveTo(hcx + hr*Math.cos(a), hcy + hr*Math.sin(a))
+                    : oc.lineTo(hcx + hr*Math.cos(a), hcy + hr*Math.sin(a));
+          }
+          oc.closePath(); oc.stroke();
+          // faint filled centre
+          oc.fillStyle = hexA.replace('0.28','0.06').replace('0.22','0.06');
+          oc.fill();
         }
 
-        // Alien crystal formations
-        if (seededRand(s2) > 0.78) {
-          const fcx = x + 6 + seededRand(s1+1) * (TILE-12);
-          const fcy = y + 6 + seededRand(s1+2) * (TILE-12);
-          const isCyan  = seededRand(s2+5) > 0.5;
-          const cRGB    = isCyan ? '0,255,200' : '160,50,255';
-          const nShards = 2 + Math.floor(seededRand(s3) * 3);
-          oc.save();
-          oc.globalAlpha = 0.60;
-          for (let s = 0; s < nShards; s++) {
-            const ang = seededRand(s1 + s*10.3) * Math.PI * 2;
-            const len = 4  + seededRand(s2 + s*10.3) * 10;
-            const lw  = 1.2 + seededRand(s3 + s*10.3) * 2;
+        // Circuit-trace energy veins
+        if (seededRand(s2 + 200) > 0.50) {
+          const isCyan = seededRand(s3) > 0.5;
+          oc.strokeStyle = isCyan ? 'rgba(0,210,255,0.45)' : 'rgba(170,60,255,0.42)';
+          oc.lineWidth = 0.7;
+          oc.lineCap = 'round';
+          const vx0 = x + seededRand(s1+30)*TILE, vy0 = y + seededRand(s2+30)*TILE;
+          const vx1 = x + seededRand(s1+40)*TILE, vy1 = y + seededRand(s2+40)*TILE;
+          const vx2 = x + seededRand(s1+50)*TILE, vy2 = y + seededRand(s2+50)*TILE;
+          oc.beginPath();
+          oc.moveTo(vx0, vy0); oc.lineTo(vx1, vy1);
+          if (seededRand(s3+200) > 0.4) oc.lineTo(vx2, vy2);
+          oc.stroke();
+          oc.lineCap = 'butt';
+          // node dot at the vertex
+          const nc = isCyan ? 'rgba(0,230,255,0.7)' : 'rgba(200,80,255,0.7)';
+          oc.fillStyle = nc;
+          oc.beginPath(); oc.arc(vx1, vy1, 1.4, 0, Math.PI*2); oc.fill();
+        }
+
+        // Crystal energy formations (25% of tiles)
+        if (seededRand(s2) > 0.75) {
+          const fcx = x + 7 + seededRand(s1+1) * (TILE-14);
+          const fcy = y + 7 + seededRand(s1+2) * (TILE-14);
+          const pick = seededRand(s2+5);
+          const cRGB = pick > 0.66 ? '0,255,200' : pick > 0.33 ? '180,60,255' : '0,190,255';
+          const nShards = 2 + Math.floor(seededRand(s3) * 4);
+          oc.globalAlpha = 0.72;
+          for (let sh = 0; sh < nShards; sh++) {
+            const ang = seededRand(s1 + sh*10.3) * Math.PI * 2;
+            const len = 5 + seededRand(s2 + sh*10.3) * 12;
             oc.strokeStyle = `rgba(${cRGB},1)`;
-            oc.lineWidth   = lw;
+            oc.lineWidth   = 1.0 + seededRand(s3 + sh*10.3) * 2.2;
+            oc.lineCap = 'round';
             oc.beginPath();
             oc.moveTo(fcx, fcy);
             oc.lineTo(fcx + Math.cos(ang)*len, fcy + Math.sin(ang)*len);
             oc.stroke();
+            oc.lineCap = 'butt';
           }
-          oc.restore();
-          // Glow halo
-          const glowR = oc.createRadialGradient(fcx, fcy, 0, fcx, fcy, 15);
-          glowR.addColorStop(0, `rgba(${cRGB},0.35)`);
+          oc.globalAlpha = 1;
+          // glow halo around cluster
+          const glowR = oc.createRadialGradient(fcx, fcy, 0, fcx, fcy, 18);
+          glowR.addColorStop(0, `rgba(${cRGB},0.42)`);
           glowR.addColorStop(1, 'rgba(0,0,0,0)');
           oc.fillStyle = glowR;
-          oc.beginPath(); oc.arc(fcx, fcy, 15, 0, Math.PI*2); oc.fill();
+          oc.beginPath(); oc.arc(fcx, fcy, 18, 0, Math.PI*2); oc.fill();
         }
 
-        // Bioluminescent dots / alien spores
-        if (seededRand(s3 + 100) > 0.52) {
-          const nd = 1 + Math.floor(seededRand(s1+50) * 5);
+        // Bioluminescent micro-spores
+        if (seededRand(s3 + 100) > 0.48) {
+          const nd = 1 + Math.floor(seededRand(s1+50) * 6);
           for (let d = 0; d < nd; d++) {
             const dx  = x + 3 + seededRand(s1 + d*17.3) * (TILE-6);
             const dy2 = y + 3 + seededRand(s2 + d*23.1) * (TILE-6);
             const dc  = seededRand(s3 + d*11.7);
-            const [dr2, dg2, db3] = dc > 0.66 ? [0,220,185] : dc > 0.33 ? [185,0,255] : [0,185,255];
-            const da  = 0.30 + seededRand(s2 + d*31.3) * 0.55;
-            const ds  = 0.7  + seededRand(s1 + d*41.7) * 2.2;
+            const [dr2, dg2, db3] = dc > 0.66 ? [0,225,190]
+                                  : dc > 0.33 ? [200,10,255]
+                                  :             [0,200,255];
+            const da  = 0.35 + seededRand(s2 + d*31.3) * 0.55;
+            const ds  = 0.8  + seededRand(s1 + d*41.7) * 2.4;
             oc.fillStyle = `rgba(${dr2},${dg2},${db3},${da})`;
             oc.beginPath(); oc.arc(dx, dy2, ds, 0, Math.PI*2); oc.fill();
           }
         }
 
-        // Glowing alien grid border
-        oc.strokeStyle = 'rgba(0,210,175,0.22)';
+        // Subtle grid border
+        oc.strokeStyle = 'rgba(60,10,140,0.22)';
         oc.lineWidth   = 0.5;
         oc.strokeRect(x+0.5, y+0.5, TILE-1, TILE-1);
 
       } else {
-        // ═══ SANDY PATH ═══
+        // ═══ ENERGY CORRIDOR (path) ═══
 
-        // Base sand color with per-tile variation
-        const sr2 = Math.floor(210 + seededRand(s1)     * 35);
-        const sg2 = Math.floor(175 + seededRand(s2)     * 28);
-        const sb2 = Math.floor(100 + seededRand(s3)     * 28);
-        oc.fillStyle = `rgb(${sr2},${sg2},${sb2})`;
+        // Near-black base with cool blue undertone
+        oc.fillStyle = '#030510';
         oc.fillRect(x, y, TILE, TILE);
 
-        // Sand grain micro-texture
-        const nGrains = 40 + Math.floor(seededRand(s2+300) * 25);
-        for (let g = 0; g < nGrains; g++) {
-          const gx  = x + seededRand(s1 + g*3.1)  * TILE;
-          const gy  = y + seededRand(s2 + g*7.3)  * TILE;
-          const lit = seededRand(s3 + g*11.7) > 0.5;
-          const ga  = 0.10 + seededRand(s1 + g*13.3) * 0.24;
-          const gs  = 0.5  + seededRand(s2 + g*17.9) * 1.4;
-          oc.fillStyle = lit ? `rgba(255,235,170,${ga})` : `rgba(140,95,40,${ga})`;
-          oc.beginPath(); oc.arc(gx, gy, gs, 0, Math.PI*2); oc.fill();
-        }
+        // Subtle centre glow
+        const cg = oc.createRadialGradient(x+TILE/2, y+TILE/2, 0, x+TILE/2, y+TILE/2, TILE*0.68);
+        cg.addColorStop(0, 'rgba(0,80,200,0.14)');
+        cg.addColorStop(1, 'rgba(0,0,0,0)');
+        oc.fillStyle = cg; oc.fillRect(x, y, TILE, TILE);
 
-        // Worn rut streak along the center of travel
-        const rutGrad = oc.createLinearGradient(x, y, x, y+TILE);
-        rutGrad.addColorStop(0,    'rgba(100,65,20,0.0)');
-        rutGrad.addColorStop(0.35, 'rgba(100,65,20,0.18)');
-        rutGrad.addColorStop(0.65, 'rgba(100,65,20,0.18)');
-        rutGrad.addColorStop(1,    'rgba(100,65,20,0.0)');
-        oc.fillStyle = rutGrad;
-        oc.fillRect(x, y, TILE, TILE);
+        // Panel-line grid inside the corridor
+        oc.strokeStyle = 'rgba(0,90,180,0.18)';
+        oc.lineWidth = 0.6;
+        // horizontal thirds
+        oc.beginPath();
+        oc.moveTo(x,        y + TILE/3); oc.lineTo(x+TILE, y + TILE/3);
+        oc.moveTo(x,        y + TILE*2/3); oc.lineTo(x+TILE, y + TILE*2/3);
+        oc.stroke();
 
-        // Edge shadow — left & right
-        const eH = oc.createLinearGradient(x, y, x+TILE, y);
-        eH.addColorStop(0,    'rgba(65,38,10,0.42)');
-        eH.addColorStop(0.20, 'rgba(0,0,0,0)');
-        eH.addColorStop(0.80, 'rgba(0,0,0,0)');
-        eH.addColorStop(1,    'rgba(65,38,10,0.42)');
-        oc.fillStyle = eH; oc.fillRect(x, y, TILE, TILE);
-
-        // Edge shadow — top & bottom
-        const eV = oc.createLinearGradient(x, y, x, y+TILE);
-        eV.addColorStop(0,    'rgba(65,38,10,0.34)');
-        eV.addColorStop(0.18, 'rgba(0,0,0,0)');
-        eV.addColorStop(0.82, 'rgba(0,0,0,0)');
-        eV.addColorStop(1,    'rgba(65,38,10,0.34)');
-        oc.fillStyle = eV; oc.fillRect(x, y, TILE, TILE);
-
-        // Scattered pebbles
-        const nPeb = Math.floor(seededRand(s3+400) * 4);
-        for (let p = 0; p < nPeb; p++) {
-          const px  = x + 5 + seededRand(s1 + p*29.3 + 500) * (TILE-10);
-          const py2 = y + 5 + seededRand(s2 + p*37.1 + 500) * (TILE-10);
-          const ps  = 1.5 + seededRand(s3 + p*41.7) * 2.8;
-          const pd  = seededRand(s1 + p*53.3);
-          oc.fillStyle = pd > 0.5 ? 'rgba(88,60,22,0.68)' : 'rgba(52,33,12,0.58)';
-          oc.save();
-          oc.translate(px, py2);
-          oc.rotate(seededRand(s2 + p*61.1) * Math.PI);
-          oc.beginPath();
-          oc.ellipse(0, 0, ps, ps*0.62, 0, 0, Math.PI*2);
-          oc.fill();
-          oc.restore();
-        }
-
-        // Sandy tile border
-        oc.strokeStyle = 'rgba(135,90,32,0.30)';
-        oc.lineWidth   = 0.5;
-        oc.strokeRect(x+0.5, y+0.5, TILE-1, TILE-1);
+        // Bright edge lines (neon corridor trim)
+        oc.strokeStyle = 'rgba(80,200,255,0.28)';
+        oc.lineWidth = 0.9;
+        oc.strokeRect(x+1, y+1, TILE-2, TILE-2);
       }
     }
   }
 
-  // ── Full-map vignette darkening (still in world/iso transform space) ──
-  const vig = oc.createRadialGradient(W/2, H/2, H*0.28, W/2, H/2, H*0.90);
+  // Map-edge vignette in world space
+  const vig = oc.createRadialGradient(W/2, H/2, H*0.22, W/2, H/2, H*0.88);
   vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(1, 'rgba(0,0,25,0.22)');
+  vig.addColorStop(1, 'rgba(0,0,20,0.30)');
   oc.fillStyle = vig;
   oc.fillRect(0, 0, W, H);
 
-  // ── Reset to identity transform for drawing depth walls in screen space ──
+  // ════════════════════════════════════════════════════════════════════
+  // PHASE 3 — Depth walls in screen space (taller + detailed)
+  // ════════════════════════════════════════════════════════════════════
   oc.setTransform(1, 0, 0, 1, 0, 0);
 
-  // ── South wall — bottom edge of the map (row = ROWS), visible face ──
+  // Helper: draw a single wall slab with gradient shading + panel lines
+  function wallSlab(p1, p2, fillColor, rimColor, accent, isPath) {
+    const h = WALL_H;
+    // main face gradient — lighter at top, darker at base
+    const fg = oc.createLinearGradient(0, p1.sy, 0, p1.sy + h);
+    fg.addColorStop(0, fillColor);
+    fg.addColorStop(1, 'rgba(0,0,0,0.7)');
+    oc.fillStyle = fg;
+    oc.beginPath();
+    oc.moveTo(p1.sx, p1.sy);
+    oc.lineTo(p2.sx, p2.sy);
+    oc.lineTo(p2.sx, p2.sy + h);
+    oc.lineTo(p1.sx, p1.sy + h);
+    oc.closePath();
+    oc.fill();
+    // top-edge neon rim
+    oc.strokeStyle = rimColor;
+    oc.lineWidth = 1.4;
+    oc.beginPath(); oc.moveTo(p1.sx, p1.sy); oc.lineTo(p2.sx, p2.sy); oc.stroke();
+    // horizontal panel divide at 55% down
+    const midY = p1.sy + h * 0.55;
+    oc.strokeStyle = accent;
+    oc.lineWidth = 0.7;
+    oc.beginPath(); oc.moveTo(p1.sx, midY); oc.lineTo(p2.sx, midY); oc.stroke();
+    // bottom shadow
+    oc.strokeStyle = 'rgba(0,0,0,0.6)';
+    oc.lineWidth = 1;
+    oc.beginPath(); oc.moveTo(p1.sx, p1.sy+h); oc.lineTo(p2.sx, p2.sy+h); oc.stroke();
+  }
+
+  // South wall
   for (let col = 0; col < COLS; col++) {
     const isPath = PATH_SET.has(`${col},${ROWS - 1}`);
     const p1 = toIso(col * TILE,       ROWS * TILE);
     const p2 = toIso((col + 1) * TILE, ROWS * TILE);
-    // Main face — dark sand or dark alien colour
-    oc.fillStyle = isPath ? '#6b3c10' : '#1e0848';
-    oc.beginPath();
-    oc.moveTo(p1.sx, p1.sy);
-    oc.lineTo(p2.sx, p2.sy);
-    oc.lineTo(p2.sx, p2.sy + WALL_H);
-    oc.lineTo(p1.sx, p1.sy + WALL_H);
-    oc.closePath();
-    oc.fill();
-    // Subtle top-edge highlight to separate face from top surface
-    oc.strokeStyle = isPath ? 'rgba(210,170,80,0.35)' : 'rgba(80,0,180,0.35)';
-    oc.lineWidth = 1;
-    oc.beginPath();
-    oc.moveTo(p1.sx, p1.sy); oc.lineTo(p2.sx, p2.sy);
-    oc.stroke();
-    // Bottom edge shadow
-    oc.strokeStyle = 'rgba(0,0,0,0.5)';
-    oc.lineWidth = 1;
-    oc.beginPath();
-    oc.moveTo(p1.sx, p1.sy + WALL_H); oc.lineTo(p2.sx, p2.sy + WALL_H);
-    oc.stroke();
+    wallSlab(p1, p2,
+      isPath ? 'rgba(0,20,60,0.95)'   : 'rgba(14,4,38,0.95)',
+      isPath ? 'rgba(0,180,255,0.55)' : 'rgba(120,40,255,0.55)',
+      isPath ? 'rgba(0,100,180,0.3)'  : 'rgba(80,20,180,0.3)',
+      isPath);
   }
-
-  // ── East wall — right edge of the map (col = COLS), visible face ──
+  // East wall
   for (let row = 0; row < ROWS; row++) {
     const isPath = PATH_SET.has(`${COLS - 1},${row}`);
     const p1 = toIso(COLS * TILE, row * TILE);
     const p2 = toIso(COLS * TILE, (row + 1) * TILE);
-    // East face is slightly darker than south face (ambient occlusion)
-    oc.fillStyle = isPath ? '#4e2b08' : '#130530';
-    oc.beginPath();
-    oc.moveTo(p1.sx, p1.sy);
-    oc.lineTo(p2.sx, p2.sy);
-    oc.lineTo(p2.sx, p2.sy + WALL_H);
-    oc.lineTo(p1.sx, p1.sy + WALL_H);
-    oc.closePath();
-    oc.fill();
-    // Top-edge highlight
-    oc.strokeStyle = isPath ? 'rgba(210,160,60,0.25)' : 'rgba(60,0,140,0.25)';
-    oc.lineWidth = 1;
-    oc.beginPath();
-    oc.moveTo(p1.sx, p1.sy); oc.lineTo(p2.sx, p2.sy);
-    oc.stroke();
+    wallSlab(p1, p2,
+      isPath ? 'rgba(0,12,45,0.95)'   : 'rgba(10,2,30,0.95)',
+      isPath ? 'rgba(0,140,220,0.40)' : 'rgba(90,25,200,0.40)',
+      isPath ? 'rgba(0,80,140,0.25)'  : 'rgba(60,10,150,0.25)',
+      isPath);
   }
-
-  // ── Corner cap — where south and east walls meet ──
+  // Corner seam
   {
     const corner = toIso(COLS * TILE, ROWS * TILE);
-    oc.fillStyle = '#0e0320';
-    oc.fillRect(corner.sx - 1, corner.sy, 2, WALL_H + 1);
+    const cg = oc.createLinearGradient(corner.sx, corner.sy, corner.sx, corner.sy + WALL_H);
+    cg.addColorStop(0, 'rgba(80,20,200,0.5)');
+    cg.addColorStop(1, 'rgba(0,0,0,0.8)');
+    oc.fillStyle = cg;
+    oc.fillRect(corner.sx - 1.5, corner.sy, 3, WALL_H);
   }
 
   oc.globalAlpha = 1;
@@ -922,7 +1006,7 @@ function drawHoverHighlight() {
     const def = TOWER_DEFS[state.selectedType];
     // Draw range ring using the iso transform so it appears as a proper ellipse
     ctx.save();
-    ctx.setTransform(1, 0.5, -1, 0.5, ISO_OX, ISO_OY);
+    ctx.setTransform(1, ISO_Y, -1, ISO_Y, ISO_OX, ISO_OY);
     // soft filled range disc
     const cx = c*TILE+TILE/2, cy = r*TILE+TILE/2, rr = def.range*TILE;
     ctx.fillStyle = 'rgba(90,224,138,0.08)';
