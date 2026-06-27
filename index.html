@@ -15,6 +15,22 @@ body {
   position: relative;
 }
 
+/* ── Low-health danger pulse ── */
+body.danger-pulse::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  border: 0 solid rgba(255,30,30,0);
+  pointer-events: none;
+  z-index: 100;
+  animation: dangerRing 0.7s ease-out forwards;
+}
+@keyframes dangerRing {
+  0%   { box-shadow: inset 0 0 0px 0px rgba(255,30,30,0); }
+  30%  { box-shadow: inset 0 0 80px 40px rgba(255,30,30,0.45); }
+  100% { box-shadow: inset 0 0 0px 0px rgba(255,30,30,0); }
+}
+
 /* ── Full-screen game stage ── */
 #stage {
   position: fixed;
@@ -25,6 +41,25 @@ body {
   background:
     radial-gradient(ellipse 120% 80% at 50% 0%, #1a0f3a 0%, #0a0820 45%, #05060f 100%);
   overflow: hidden;
+}
+
+/* ── Twinkling star layer (CSS animated, layered over stage bg) ── */
+#star-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.twinkle-star {
+  position: absolute;
+  border-radius: 50%;
+  animation: twinkle var(--dur, 3s) ease-in-out infinite var(--delay, 0s);
+  background: var(--col, white);
+}
+@keyframes twinkle {
+  0%, 100% { opacity: var(--min-op, 0.15); transform: scale(1); }
+  50%       { opacity: var(--max-op, 0.9);  transform: scale(var(--smax, 1.4)); }
 }
 /* animated aurora glow behind the board */
 #stage::before {
@@ -46,12 +81,32 @@ body {
 
 canvas {
   display: block;
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow:
-    0 0 0 1px rgba(120,160,255,0.18),
-    0 0 60px rgba(80,120,255,0.18),
-    0 24px 80px rgba(0,0,0,0.7);
+    0 0 0 1px rgba(120,160,255,0.22),
+    0 0 40px rgba(80,120,255,0.22),
+    0 0 80px rgba(60,80,200,0.15),
+    0 24px 80px rgba(0,0,0,0.75);
   /* sized by JS to fill the viewport while preserving aspect ratio */
+  position: relative;
+  z-index: 1;
+}
+
+/* Scanline overlay on canvas (purely CSS, rendered on top via pseudo sibling) */
+#stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0,0,0,0.04) 3px,
+    rgba(0,0,0,0.04) 4px
+  );
+  pointer-events: none;
+  z-index: 5;
+  border-radius: 12px;
 }
 
 /* ── Title bar (top-left, floating) ── */
@@ -70,8 +125,79 @@ h1 {
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 0 18px rgba(255,90,110,0.55));
+  animation: titleGlow 4s ease-in-out infinite;
+  position: relative;
+}
+@keyframes titleGlow {
+  0%, 100% { filter: drop-shadow(0 0 14px rgba(255,90,110,0.45)); }
+  50%       { filter: drop-shadow(0 0 28px rgba(255,150,60,0.85)) drop-shadow(0 0 60px rgba(255,90,110,0.35)); }
 }
 .subtitle { color: #7d8bb0; font-size: 0.82rem; letter-spacing: 0.08em; margin-top: 2px; }
+
+/* ── Wave announcement splash ── */
+#wave-splash {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+#wave-splash.show { display: flex; }
+#wave-splash-inner {
+  text-align: center;
+  animation: waveSlam 1.6s cubic-bezier(.2,.9,.3,1) forwards;
+}
+#wave-splash-inner .ws-sub {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.3em;
+  color: #ff9f43;
+  text-shadow: 0 0 20px rgba(255,160,60,0.8);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+#wave-splash-inner .ws-main {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 5rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  background: linear-gradient(135deg, #ff5e7e, #ff9f43 60%, #ffe08a);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 30px rgba(255,90,110,0.7));
+  line-height: 1;
+}
+@keyframes waveSlam {
+  0%   { opacity: 0; transform: scale(2.4) translateY(-20px); }
+  20%  { opacity: 1; transform: scale(1.0) translateY(0); }
+  65%  { opacity: 1; transform: scale(1.0); }
+  100% { opacity: 0; transform: scale(0.85) translateY(10px); }
+}
+
+/* ── Victory route name badge ── */
+#route-badge {
+  position: fixed;
+  bottom: 24px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  pointer-events: none;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  color: #79c0ff;
+  background: rgba(10,14,32,0.72);
+  border: 1px solid rgba(80,140,255,0.3);
+  border-radius: 20px;
+  padding: 6px 18px;
+  backdrop-filter: blur(10px);
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.5s;
+  text-shadow: 0 0 12px rgba(100,180,255,0.7);
+}
+#route-badge.visible { opacity: 1; }
 
 /* ── Floating HUD panel (right) ── */
 #panel {
@@ -101,6 +227,16 @@ h1 {
   border: 1px solid rgba(120,150,255,0.12);
   border-radius: 9px;
   padding: 7px 10px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.stat-tile.pulse-warn {
+  border-color: rgba(255,70,70,0.6) !important;
+  box-shadow: 0 0 14px rgba(255,40,40,0.35);
+  animation: tileWarn 0.6s ease-in-out infinite alternate;
+}
+@keyframes tileWarn {
+  from { background: rgba(60,0,0,0.28); }
+  to   { background: rgba(90,10,10,0.45); }
 }
 .stat-label { color: #7d8bb0; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; display: block; }
 .stat-val { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 1.15rem; line-height: 1.2; }
@@ -109,6 +245,12 @@ h1 {
 .stat-val.wave  { color: #79c0ff; text-shadow: 0 0 12px rgba(120,180,255,0.45); }
 .stat-val.kills { color: #5ee08a; text-shadow: 0 0 12px rgba(80,220,130,0.45); }
 .section-label { font-family:'Orbitron',sans-serif; font-size: 0.66rem; color: #6d7aa6; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px; }
+
+/* Mini progress bar under hp/cr stat tiles */
+.stat-bar-wrap { height: 3px; background: rgba(255,255,255,0.07); border-radius: 3px; margin-top: 5px; overflow: hidden; }
+.stat-bar      { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+.stat-bar.hp-bar  { background: linear-gradient(90deg, #ff4d6d, #ff9f43); box-shadow: 0 0 6px rgba(255,80,100,0.6); }
+.stat-bar.cr-bar  { background: linear-gradient(90deg, #ffa726, #ffe082); box-shadow: 0 0 6px rgba(255,180,60,0.5); }
 
 .tower-card {
   position: relative;
@@ -168,45 +310,96 @@ h1 {
   display: none;
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at center, rgba(10,5,25,0.7), rgba(0,0,0,0.92));
+  background: radial-gradient(ellipse at center, rgba(10,5,25,0.75), rgba(0,0,0,0.94));
   z-index: 50;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
 }
-#overlay.show { display: flex; animation: fadein 0.4s ease; }
-@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+#overlay.show { display: flex; animation: fadein 0.5s ease; }
+@keyframes fadein { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: scale(1); } }
 #overlay-box {
-  background: linear-gradient(160deg, rgba(24,28,52,0.95), rgba(12,14,30,0.96));
-  border: 1px solid rgba(255,107,107,0.5);
-  border-radius: 18px;
-  padding: 44px 52px;
+  background: linear-gradient(160deg, rgba(24,28,52,0.97), rgba(12,14,30,0.98));
+  border: 1px solid rgba(255,107,107,0.55);
+  border-radius: 22px;
+  padding: 48px 60px;
   text-align: center;
-  max-width: 420px;
-  box-shadow: 0 0 60px rgba(255,90,110,0.3), 0 30px 80px rgba(0,0,0,0.7);
+  max-width: 460px;
+  box-shadow:
+    0 0 0 1px rgba(255,107,107,0.15),
+    0 0 80px rgba(255,90,110,0.35),
+    0 30px 80px rgba(0,0,0,0.8),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  position: relative;
+  overflow: hidden;
 }
-#overlay-box h2 { font-family:'Orbitron',sans-serif; font-size: 2.3rem; margin-bottom: 12px; filter: drop-shadow(0 0 20px rgba(255,90,110,0.5)); }
-#overlay-box p  { color: #9aa6cc; margin-bottom: 24px; font-size: 0.98rem; line-height: 1.55; white-space: pre-line; }
+#overlay-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% -10%, rgba(255,90,110,0.12), transparent 65%);
+  pointer-events: none;
+}
+#overlay-box h2 {
+  font-family:'Orbitron',sans-serif;
+  font-size: 2.5rem;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 0 24px rgba(255,90,110,0.65));
+  letter-spacing: 0.06em;
+}
+#overlay-box p  { color: #9aa6cc; margin-bottom: 28px; font-size: 1rem; line-height: 1.6; white-space: pre-line; }
+#overlay-box .ov-stats {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+#overlay-box .ov-stat {
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(120,150,255,0.18);
+  border-radius: 10px;
+  padding: 10px 18px;
+  min-width: 80px;
+}
+#overlay-box .ov-stat-val {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #79c0ff;
+  text-shadow: 0 0 14px rgba(100,180,255,0.6);
+}
+#overlay-box .ov-stat-label { font-size: 0.72rem; color: #6d7aa6; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
 #restart-btn {
-  padding: 12px 36px;
-  background: linear-gradient(180deg, #2bb955, #1d8c3f);
+  padding: 14px 40px;
+  background: linear-gradient(135deg, #2bb955 0%, #1d8c3f 60%, #0f5c28 100%);
   border: 1px solid #46d672;
   color: white;
   font-family: 'Orbitron', sans-serif;
   font-size: 1rem;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 700;
-  transition: all 0.18s;
-  box-shadow: 0 6px 22px rgba(40,180,80,0.4);
+  letter-spacing: 0.05em;
+  transition: all 0.2s cubic-bezier(.2,.8,.2,1);
+  box-shadow: 0 6px 22px rgba(40,180,80,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
 }
-#restart-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(40,180,80,0.55); }
+#restart-btn:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 12px 34px rgba(40,180,80,0.6), inset 0 1px 0 rgba(255,255,255,0.15); }
 </style>
 </head>
 <body>
 <div id="stage">
+  <div id="star-layer"></div>
   <canvas id="canvas"></canvas>
 </div>
+
+<div id="wave-splash">
+  <div id="wave-splash-inner">
+    <div class="ws-sub" id="ws-sub-text">incoming</div>
+    <div class="ws-main" id="ws-main-text">WAVE 1</div>
+  </div>
+</div>
+
+<div id="route-badge" id="route-badge"></div>
 
 <div id="titlebar">
   <h1>⚡ SNEAKATTACK</h1>
@@ -217,8 +410,16 @@ h1 {
   <div id="panel">
     <div class="panel-section">
       <div class="stat-grid">
-        <div class="stat-tile"><span class="stat-label">❤️ Health</span><span class="stat-val hp"  id="ui-hp">20</span></div>
-        <div class="stat-tile"><span class="stat-label">💰 Credits</span><span class="stat-val cr"  id="ui-cr">300</span></div>
+        <div class="stat-tile" id="hp-tile">
+          <span class="stat-label">❤️ Health</span>
+          <span class="stat-val hp" id="ui-hp">20</span>
+          <div class="stat-bar-wrap"><div class="stat-bar hp-bar" id="ui-hp-bar" style="width:100%"></div></div>
+        </div>
+        <div class="stat-tile">
+          <span class="stat-label">💰 Credits</span>
+          <span class="stat-val cr" id="ui-cr">300</span>
+          <div class="stat-bar-wrap"><div class="stat-bar cr-bar" id="ui-cr-bar" style="width:100%"></div></div>
+        </div>
         <div class="stat-tile"><span class="stat-label">🌊 Wave</span>  <span class="stat-val wave" id="ui-wv">0 / 6</span></div>
         <div class="stat-tile"><span class="stat-label">💀 Kills</span> <span class="stat-val kills" id="ui-kl">0</span></div>
       </div>
@@ -269,6 +470,11 @@ h1 {
   <div id="overlay-box">
     <h2 id="ov-title">Game Over</h2>
     <p  id="ov-msg">The base was overrun!</p>
+    <div class="ov-stats">
+      <div class="ov-stat"><div class="ov-stat-val" id="ov-waves">0</div><div class="ov-stat-label">Waves</div></div>
+      <div class="ov-stat"><div class="ov-stat-val" id="ov-kills" style="color:#5ee08a;text-shadow:0 0 14px rgba(80,220,130,0.6)">0</div><div class="ov-stat-label">Kills</div></div>
+      <div class="ov-stat"><div class="ov-stat-val" id="ov-leaked" style="color:#ff7b8e;text-shadow:0 0 14px rgba(255,90,110,0.6)">0</div><div class="ov-stat-label">Leaked</div></div>
+    </div>
     <button id="restart-btn" onclick="restartGame()">↩ Play Again</button>
   </div>
 </div>
@@ -419,10 +625,39 @@ const WAVE_DEFS = [
 // ─── State ────────────────────────────────────────────────────────────────────
 let state, particles, animId, bgCache = null;
 
+// ─── Twinkling star layer (CSS DOM) ─────────────────────────────────────────────
+(function buildTwinkleStars() {
+  const layer = document.getElementById('star-layer');
+  const count = 80;
+  const colors = ['rgba(185,245,255,VAL)', 'rgba(220,190,255,VAL)', 'rgba(255,255,255,VAL)', 'rgba(255,230,170,VAL)'];
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement('div');
+    s.className = 'twinkle-star';
+    const size = 0.8 + Math.random() * 2.4;
+    const col  = colors[Math.floor(Math.random() * colors.length)];
+    const maxOp = 0.5 + Math.random() * 0.5;
+    const minOp = 0.05 + Math.random() * 0.1;
+    s.style.cssText = [
+      `left:${Math.random() * 100}%`,
+      `top:${Math.random() * 100}%`,
+      `width:${size}px`,
+      `height:${size}px`,
+      `--dur:${2 + Math.random() * 5}s`,
+      `--delay:${-Math.random() * 6}s`,
+      `--col:${col.replace('VAL', maxOp)}`,
+      `--min-op:${minOp}`,
+      `--max-op:${maxOp}`,
+      `--smax:${1.2 + Math.random() * 0.8}`,
+    ].join(';');
+    layer.appendChild(s);
+  }
+})();
+
 // ─── Visual FX layer ────────────────────────────────────────────────────────────
-let shockwaves = [];   // expanding rings on kills / impacts
-let muzzles    = [];   // muzzle-flash bursts at tower barrels
-let shake      = { mag: 0, until: 0 };   // screen-shake state
+let shockwaves  = [];   // expanding rings on kills / impacts
+let muzzles     = [];   // muzzle-flash bursts at tower barrels
+let dmgNumbers  = [];   // floating damage text labels
+let shake       = { mag: 0, until: 0 };   // screen-shake state
 
 function addShake(mag, ms = 120) {
   shake.mag   = Math.max(shake.mag, mag);
@@ -433,6 +668,9 @@ function addShockwave(x, y, color, maxR = 34, life = 22) {
 }
 function addMuzzle(x, y, ang, color, size = 10) {
   muzzles.push({ x, y, ang, color, size, life: 7, maxLife: 7 });
+}
+function addDmgNumber(x, y, dmg, color) {
+  dmgNumbers.push({ x, y, dmg, color, vy: -1.8, life: 38, maxLife: 38 });
 }
 
 function mkState() {
@@ -482,11 +720,40 @@ function setMsg(text, cls = '') {
   el.className   = cls ? `msg-${cls}` : '';
 }
 
+const MAX_HEALTH  = 20;
+const MAX_CREDITS = 600;   // approximate ceiling for bar display
+let _lastHealth   = 20;
+
 function updateUI() {
   document.getElementById('ui-hp').textContent = state.health;
   document.getElementById('ui-cr').textContent = state.credits;
   document.getElementById('ui-wv').textContent = `${state.wave} / ${state.maxWave}`;
   document.getElementById('ui-kl').textContent = state.kills;
+
+  // HP bar
+  const hpPct = Math.max(0, state.health / MAX_HEALTH) * 100;
+  document.getElementById('ui-hp-bar').style.width = hpPct + '%';
+
+  // Credits bar — clamp at MAX_CREDITS for display
+  const crPct = Math.min(100, (state.credits / MAX_CREDITS) * 100);
+  document.getElementById('ui-cr-bar').style.width = crPct + '%';
+
+  // HP tile warning pulse
+  const hpTile = document.getElementById('hp-tile');
+  if (state.health <= 5 && state.phase !== 'gameover') {
+    hpTile.classList.add('pulse-warn');
+  } else {
+    hpTile.classList.remove('pulse-warn');
+  }
+
+  // Danger pulse on HP loss
+  if (state.health < _lastHealth && state.phase !== 'gameover') {
+    document.body.classList.remove('danger-pulse');
+    document.body.offsetHeight; // force reflow to restart animation
+    document.body.classList.add('danger-pulse');
+    setTimeout(() => document.body.classList.remove('danger-pulse'), 750);
+  }
+  _lastHealth = state.health;
 
   const btn = document.getElementById('start-btn');
   if (state.phase === 'prep' && state.wave < state.maxWave) {
@@ -1329,14 +1596,31 @@ function drawTower(t) {
   ctx.restore();
 
   // Ammo bar — positioned just below the gun sprite in screen space
-  const pct = t.ammo / def.ammo;
-  const bw  = TILE - 10;
-  const bx  = cx - bw / 2;
-  const by  = cy + 28;
-  ctx.fillStyle = '#0d1117';
-  ctx.fillRect(bx, by, bw, 5);
-  ctx.fillStyle = dead ? '#444' : pct > 0.5 ? '#3fb950' : pct > 0.25 ? '#ffa657' : '#ff6b6b';
-  ctx.fillRect(bx, by, Math.max(0, bw * pct), 5);
+  const pct    = t.ammo / def.ammo;
+  const bw     = TILE - 8;
+  const bx     = cx - bw / 2;
+  const by     = cy + 28;
+  const aColor = dead ? '#444' : pct > 0.5 ? '#3fb950' : pct > 0.25 ? '#ffa657' : '#ff6b6b';
+  // bg track
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.beginPath();
+  ctx.roundRect(bx - 1, by - 1, bw + 2, 7, 3);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(20,24,36,0.9)';
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, 5, 2);
+  ctx.fill();
+  // fill
+  if (!dead && pct > 0) {
+    ctx.save();
+    ctx.shadowColor = aColor;
+    ctx.shadowBlur  = 5;
+    ctx.fillStyle   = aColor;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, Math.max(0, bw * pct), 5, 2);
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 // ── Scout "Greyling" – slim speedy alien with huge bug-eyes, antennae, 4 spindly legs ──
@@ -1764,15 +2048,34 @@ function drawEnemy(e) {
   else                           drawTank(sx, sy, s, e.flash);
 
   // Health bar in screen space above the sprite
-  const barW = s * 3.2;
-  const barY = e.type === 'scout'   ? sy - s * 2.08
-             : e.type === 'soldier' ? sy - s * 1.92
-             :                        sy - s * 2.38;
+  const barW = s * 3.4;
+  const barH = e.type === 'tank' ? 6 : 5;
+  const barY = e.type === 'scout'   ? sy - s * 2.15
+             : e.type === 'soldier' ? sy - s * 2.05
+             :                        sy - s * 2.55;
   const pct  = e.hp / e.maxHp;
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(sx - barW/2, barY, barW, 4);
-  ctx.fillStyle = pct > 0.6 ? '#3fb950' : pct > 0.3 ? '#ffa657' : '#ff4444';
-  ctx.fillRect(sx - barW/2, barY, barW * pct, 4);
+  const barColor = pct > 0.6 ? '#3fb950' : pct > 0.3 ? '#ffa657' : '#ff4444';
+  // shadow bg
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.beginPath();
+  ctx.roundRect(sx - barW/2 - 1, barY - 1, barW + 2, barH + 2, 3);
+  ctx.fill();
+  // empty track
+  ctx.fillStyle = 'rgba(30,30,50,0.9)';
+  ctx.beginPath();
+  ctx.roundRect(sx - barW/2, barY, barW, barH, 2);
+  ctx.fill();
+  // fill with glow
+  ctx.save();
+  ctx.shadowColor = barColor;
+  ctx.shadowBlur  = 6;
+  ctx.fillStyle   = barColor;
+  if (barW * pct > 0) {
+    ctx.beginPath();
+    ctx.roundRect(sx - barW/2, barY, barW * pct, barH, 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawBullet(b) {
@@ -1847,6 +2150,34 @@ function drawFX() {
     ctx.restore();
   }
   ctx.globalAlpha = 1;
+}
+
+function drawDmgNumbers() {
+  ctx.save();
+  for (const d of dmgNumbers) {
+    const { sx, sy } = toIso(d.x, d.y);
+    const k   = d.life / d.maxLife;
+    const age = 1 - k;
+    const rise = (d.maxLife - d.life) * 1.1;
+    ctx.globalAlpha = k > 0.3 ? 1 : k / 0.3;
+    ctx.font = `bold ${11 + Math.round(d.dmg * 0.9)}px Orbitron, Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = d.color;
+    ctx.shadowBlur  = 10;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.lineWidth   = 3;
+    ctx.strokeText(`-${d.dmg}`, sx, sy - 20 - rise);
+    ctx.fillStyle = d.color;
+    ctx.fillText(`-${d.dmg}`, sx, sy - 20 - rise);
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+function updateDmgNumbers() {
+  for (const d of dmgNumbers) { d.y += d.vy * 0.3; d.life--; }
+  dmgNumbers = dmgNumbers.filter(d => d.life > 0);
 }
 
 function drawParticles() {
@@ -1980,10 +2311,18 @@ function bulletUpdate(b) {
   if (dist < b.speed + b.r) {
     b.target.hp    -= b.damage;
     b.target.flash  = 7;
+    addDmgNumber(b.target.x, b.target.y, b.damage, b.color);
     if (b.target.hp <= 0) {
-      spawnParticles(b.target.x, b.target.y, ENEMY_DEFS[b.target.type].color);
-      state.credits += ENEMY_DEFS[b.target.type].reward;
+      const def2 = ENEMY_DEFS[b.target.type];
+      spawnParticles(b.target.x, b.target.y, def2.color);
+      state.credits += def2.reward;
       state.kills++;
+      // Extra big shockwave on tank kill
+      if (b.target.type === 'tank') {
+        addShockwave(b.target.x, b.target.y, def2.color, 60, 30);
+        addShockwave(b.target.x, b.target.y, '#ffffff',   40, 18);
+        addShake(8, 200);
+      }
     } else {
       // small impact spark + ring on a non-fatal hit
       addShockwave(b.target.x, b.target.y, b.color, 16, 12);
@@ -2054,6 +2393,21 @@ function updateFX() {
 }
 
 // ─── Wave management ──────────────────────────────────────────────────────────
+function showWaveSplash(waveNum) {
+  const sub  = document.getElementById('ws-sub-text');
+  const main = document.getElementById('ws-main-text');
+  const wrap = document.getElementById('wave-splash');
+  sub.textContent  = waveNum <= 1 ? 'PREPARE FOR' : 'INCOMING';
+  main.textContent = `WAVE ${waveNum}`;
+  wrap.classList.add('show');
+  // Remove the class after animation so it can be re-triggered next wave
+  const inner = document.getElementById('wave-splash-inner');
+  inner.style.animation = 'none';
+  inner.offsetHeight; // force reflow
+  inner.style.animation = '';
+  setTimeout(() => wrap.classList.remove('show'), 1700);
+}
+
 function startWave() {
   if (state.phase !== 'prep' || state.wave >= state.maxWave) return;
   state.wave++;
@@ -2061,6 +2415,7 @@ function startWave() {
   state.spawnTimer = 0;
   state.spawnQueue = buildSpawnQueue(state.wave - 1);
   setMsg(`Wave ${state.wave} incoming! Prepare yourself.`, 'warn');
+  showWaveSplash(state.wave);
   updateUI();
 }
 
@@ -2087,6 +2442,7 @@ function waveComplete() {
   const newRouteIdx = state.wave;
   setRoute(newRouteIdx);
   const routeName = routeNames[newRouteIdx % routeNames.length] || `Layout ${newRouteIdx + 1}`;
+  showRouteBadge(routeName);
   setMsg(
     `Wave ${state.wave} cleared! +${gunCredits} gun credits awarded. ⚠ New battlefield: ${routeName} — redeploy your weapons!`,
     'warn'
@@ -2131,6 +2487,7 @@ function gameLoop() {
     state.bullets.forEach(drawBullet);
     drawParticles();
     drawFX();
+    drawDmgNumbers();
 
     ctx.restore();
 
@@ -2148,6 +2505,7 @@ function gameLoop() {
       state.bullets = state.bullets.filter(bulletUpdate);
       updateParticles();
       updateFX();
+      updateDmgNumbers();
 
       // Wave done?
       if (state.spawnQueue.length === 0 && state.enemies.length === 0 && state.bullets.length === 0) {
@@ -2156,6 +2514,7 @@ function gameLoop() {
     } else {
       updateParticles();
       updateFX();
+      updateDmgNumbers();
     }
 
     if (state.health <= 0 && state.phase !== 'gameover') {
@@ -2176,7 +2535,17 @@ function gameLoop() {
 function showOverlay(title, msg) {
   document.getElementById('ov-title').textContent = title;
   document.getElementById('ov-msg').textContent   = msg;
+  document.getElementById('ov-waves').textContent = state.wave;
+  document.getElementById('ov-kills').textContent = state.kills;
+  document.getElementById('ov-leaked').textContent = state.leaked;
   document.getElementById('overlay').classList.add('show');
+}
+
+function showRouteBadge(name) {
+  const b = document.getElementById('route-badge');
+  b.textContent = `⚡ New Layout: ${name}`;
+  b.classList.add('visible');
+  setTimeout(() => b.classList.remove('visible'), 3500);
 }
 
 function restartGame() {
@@ -2184,11 +2553,15 @@ function restartGame() {
   particles    = [];
   shockwaves   = [];
   muzzles      = [];
+  dmgNumbers   = [];
   shake        = { mag: 0, until: 0 };
   spawnLaneIdx = 0;
+  _lastHealth  = 20;
   state        = mkState();
   setRoute(0);
   document.querySelectorAll('.tower-card').forEach(el => el.classList.remove('selected'));
+  document.getElementById('hp-tile').classList.remove('pulse-warn');
+  document.body.classList.remove('danger-pulse');
   setMsg('Select a tower type, then click a green tile to build.');
   updateUI();
 }
